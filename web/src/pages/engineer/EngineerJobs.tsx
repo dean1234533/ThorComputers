@@ -42,7 +42,7 @@ export function AvailableJobs() {
         <Select label="Posted" value={f.age} onChange={e => setF({ ...f, age: e.target.value })}><option value="">Any time</option><option value="1">Last 24h</option><option value="3">Last 3 days</option><option value="7">Last week</option></Select>
         <Select label="Distance" value={f.dist} onChange={e => setF({ ...f, dist: e.target.value })} disabled={!geo}><option value="">Any ({radius} mi area)</option>{[5, 10, 20, 50].map(d => <option key={d} value={d}>Within {d} mi</option>)}</Select></div>
       {jobs.loading ? <ListSkeleton /> : shown.length === 0 ? <EmptyState icon={Search} title="No matching jobs right now" body="New jobs appear here in real time, and we’ll notify you when one matches." /> :
-        <ul className="space-y-3">{shown.map(j => <li key={j.id}><Link to={`/engineer/jobs/${j.id}`} className="block rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5 transition hover:shadow-md">
+        <ul className="space-y-3">{shown.map(j => <li key={j.id}><Link to={`/engineer/jobs/${j.id}`} className="block surface p-5 transition hover:shadow-md">
           <div className="flex items-start justify-between gap-3"><div><p className="font-medium">{devLabel(j.device.type)} · {j.device.manufacturer}</p><p className="mt-0.5 line-clamp-2 text-sm text-thor-slate">{j.summary}</p></div>{j.urgency === 'urgent' && <Badge tone="bad"><Zap className="size-3" />Urgent</Badge>}</div>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-thor-text"><span className="flex items-center gap-1"><MapPin className="size-3.5" />{j.location.area}{geo && ` · ${miles(geo, j.location).toFixed(0)} mi`}</span><span className="flex items-center gap-1"><Clock className="size-3.5" />{age(j.createdAt?.toDate())}</span><span>{j.serviceMethods.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(' / ')}</span><span className="ml-auto font-medium text-thor-blue">{j.quoteCount} quote{j.quoteCount === 1 ? '' : 's'}</span></div></Link></li>)}</ul>}
       {jobs.data.length >= n && <Button variant="soft" className="mx-auto mt-5 flex" onClick={() => setN(n + 20)}>Load more</Button>}</div></ApprovalGate>)
@@ -101,7 +101,7 @@ export function MyQuotations() {
   return (
     <div><PageHeader title="My Quotations" />
       {q.loading ? <ListSkeleton /> : q.data.length === 0 ? <EmptyState icon={Search} title="No quotations yet" body="Find a job that suits you and send your first quote." action={<Link to="/engineer/jobs"><Button>Browse jobs</Button></Link>} /> :
-        <ul className="space-y-3">{q.data.map(x => <li key={x.id}><Link to={x.status === 'accepted' ? `/engineer/my-jobs/${x.jobId}` : `/engineer/jobs/${x.jobId}`} className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5"><div className="flex-1"><p className="font-display text-xl text-thor-blue">{gbp(x.totalPence)}</p><p className="text-sm text-thor-text">{x.durationHours}h · {x.availability}</p></div><Badge tone={tone[x.status as keyof typeof tone] ?? 'neutral'}>{x.status}</Badge></Link></li>)}</ul>}</div>)
+        <ul className="space-y-3">{q.data.map(x => <li key={x.id}><Link to={x.status === 'accepted' ? `/engineer/my-jobs/${x.jobId}` : `/engineer/jobs/${x.jobId}`} className="flex items-center gap-4 surface p-5"><div className="flex-1"><p className="font-display text-xl text-thor-blue">{gbp(x.totalPence)}</p><p className="text-sm text-thor-text">{x.durationHours}h · {x.availability}</p></div><Badge tone={tone[x.status as keyof typeof tone] ?? 'neutral'}>{x.status}</Badge></Link></li>)}</ul>}</div>)
 }
 
 export function MyJobs() {
@@ -110,7 +110,7 @@ export function MyJobs() {
   return (
     <div><PageHeader title="My Jobs" />
       {j.loading ? <ListSkeleton /> : j.data.length === 0 ? <EmptyState icon={Search} title="No jobs yet" body="Jobs appear here when a customer accepts your quote." /> :
-        <ul className="space-y-3">{j.data.map(x => <li key={x.id}><Link to={`/engineer/my-jobs/${x.id}`} className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5"><div className="min-w-0 flex-1"><p className="font-medium">{x.device.manufacturer} {x.device.model}</p><p className="truncate text-sm text-thor-text">{x.reference} · {x.location.area}</p></div><StatusPill status={x.status} /></Link></li>)}</ul>}</div>)
+        <ul className="space-y-3">{j.data.map(x => <li key={x.id}><Link to={`/engineer/my-jobs/${x.id}`} className="flex items-center gap-4 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.device.manufacturer} {x.device.model}</p><p className="truncate text-sm text-thor-text">{x.reference} · {x.location.area}</p></div><StatusPill status={x.status} /></Link></li>)}</ul>}</div>)
 }
 
 export function MyJobDetail() {

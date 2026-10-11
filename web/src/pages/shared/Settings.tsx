@@ -30,13 +30,13 @@ export default function Settings() {
   return (
     <div className="max-w-2xl"><PageHeader title="Settings" />
       <Section title="Notifications">
-        <div className="mb-4 flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5"><Bell className="size-6 text-thor-blue" />
+        <div className="mb-4 flex items-center gap-3 surface p-5"><Bell className="size-6 text-thor-blue" />
           <div className="flex-1"><p className="font-medium">Push notifications on this device</p><p className="text-sm text-thor-text">{support === 'ios-needs-install' ? 'On iPhone and iPad, install the app to your Home Screen first.' : support === 'unsupported' ? 'Not supported by this browser.' : perm === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings.' : perm === 'granted' ? 'On' : 'Off'}</p></div>
           {support === 'ok' && perm !== 'denied' && <Toggle on={perm === 'granted'} onChange={togglePush} label="Push notifications" />}</div>
         <table className="w-full text-sm"><thead><tr className="text-left text-thor-text"><th className="py-2 font-medium">Alert me about</th><th className="w-16 text-center font-medium">Push</th><th className="w-16 text-center font-medium">Email</th></tr></thead>
           <tbody className="divide-y divide-ink/8">{CATS.map(([k, l]) => <tr key={k}><td className="py-3">{l}</td>{(['push', 'email'] as const).map(ch => <td key={ch} className="text-center"><input type="checkbox" aria-label={`${l} ${ch}`} className="size-5 accent-thor-blue" checked={prefs[ch]?.[k] !== false} onChange={e => setPref(ch, k, e.target.checked)} /></td>)}</tr>)}</tbody></table>
         <p className="mt-2 text-xs text-thor-text">Push alerts never show names, addresses or message text on your lock screen.</p></Section>
-      <Section title="Install the app"><div className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5"><Smartphone className="size-6 text-thor-blue" />
+      <Section title="Install the app"><div className="flex items-center gap-3 surface p-5"><Smartphone className="size-6 text-thor-blue" />
         <p className="flex-1 text-sm">{inst.standalone ? 'You’re using the installed app.' : 'Add Thor Computer to your device for faster access.'}</p>
         {!inst.standalone && (inst.canPrompt ? <Button size="sm" onClick={inst.install}><Download className="size-4" />Install</Button> : <Button size="sm" variant="soft" onClick={() => setSteps(true)}>How to install</Button>)}</div></Section>
       <Section title="Your data & privacy"><ul className="divide-y divide-ink/8 rounded-2xl bg-white shadow-sm ring-1 ring-ink/5">

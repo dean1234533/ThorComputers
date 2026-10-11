@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { createUserWithEmailAndPassword, sendEmailVerification, signInWithPopup, GoogleAuthProvider } from 'firebase/auth'
+import { createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { api, errMsg } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -11,7 +11,7 @@ import AuthLayout from './AuthLayout'
 const POSTCODE = /^[A-Za-z]{1,2}\d[A-Za-z\d]? ?\d[A-Za-z]{2}$/
 const PHONE = /^(\+44|0)[\d\s]{9,14}$/
 
-/** Used for both new email sign-ups and Google users who still need a profile (/setup). */
+/** Used for new email sign-ups and signed-in users who still need a profile (/setup). */
 export default function Register({ setup = false }: { setup?: boolean }) {
   const nav = useNavigate(); const [qs] = useSearchParams(); const { user } = useAuth()
   const [role, setRole] = useState<'customer' | 'engineer'>(qs.get('role') === 'engineer' ? 'engineer' : 'customer')
@@ -40,7 +40,6 @@ export default function Register({ setup = false }: { setup?: boolean }) {
       nav(auth.currentUser?.emailVerified ? '/' : '/verify', { replace: true })
     } catch (x: any) { setTop(x?.code === 'auth/email-already-in-use' ? 'An account with this email already exists. Try signing in.' : errMsg(x)) } finally { setBusy(false) }
   }
-  const google = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); nav('/setup') } catch (x: any) { if (x?.code !== 'auth/popup-closed-by-user') setTop(errMsg(x)) } }
 
   return (
     <AuthLayout title={setup ? 'Finish setting up' : 'Create your account'} sub={setup ? 'Just a few details so we can get you started.' : 'It takes a minute. No payment details needed.'}>
@@ -61,9 +60,7 @@ export default function Register({ setup = false }: { setup?: boolean }) {
         {top && <p role="alert" className="text-sm text-bad">{top}</p>}
         <Button type="submit" loading={busy} className="w-full" size="lg">{setup ? 'Continue' : 'Create account'}</Button>
       </form>
-      {!setup && <><div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-thor-text"><span className="h-px flex-1 bg-ink/10" />or<span className="h-px flex-1 bg-ink/10" /></div>
-        <Button variant="soft" onClick={google} className="w-full" size="lg">Sign up with Google</Button>
-        <p className="mt-6 text-center text-sm text-thor-text">Already registered? <Link to="/login" className="font-medium text-thor-blue hover:underline">Sign in</Link></p></>}
+      {!setup && <p className="mt-6 text-center text-sm text-thor-text">Already registered? <Link to="/login" className="font-medium text-thor-blue hover:underline">Sign in</Link></p>}
     </AuthLayout>
   )
 }

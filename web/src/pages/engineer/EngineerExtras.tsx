@@ -15,7 +15,7 @@ export function EngineerDashboard() {
   const live = useQuery<{ totalPence: number }>(approved ? 'repairQuotes' : null, () => [where('engineerId', '==', user!.uid), where('status', '==', 'submitted'), limit(50)], [user!.uid, approved])
   const jobs = useQuery<{ status: string }>(approved ? 'repairRequests' : null, () => [where('selectedEngineerId', '==', user!.uid), limit(50)], [user!.uid, approved])
   const active = jobs.data.filter(j => !['closed', 'cancelled', 'completed'].includes(j.status)).length
-  const Tile = ({ icon: I, label, value, to }: { icon: typeof Star; label: string; value: React.ReactNode; to: string }) => <Link to={to} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" /><p className="font-display text-3xl">{value}</p><p className="text-sm text-thor-text">{label}</p></Link>
+  const Tile = ({ icon: I, label, value, to }: { icon: typeof Star; label: string; value: React.ReactNode; to: string }) => <Link to={to} className="surface p-5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" /><p className="font-display text-3xl">{value}</p><p className="text-sm text-thor-text">{label}</p></Link>
   return (
     <div><PageHeader title={`Hello, ${profile?.fullName.split(' ')[0] ?? ''}`} sub="Your engineer dashboard." />
       {!approved ? <div className="rounded-3xl bg-thor-blue p-6 text-white"><h2 className="font-display text-xl">{app.data?.status === 'pending' ? 'Your application is being reviewed' : 'Finish your application'}</h2><p className="mt-1.5 text-white/80">{app.data?.status === 'pending' ? 'We’ll notify you as soon as there’s a decision.' : 'Complete your profile and upload qualifications to start receiving jobs.'}</p><Link to="/engineer/profile"><Button variant="cta" className="mt-4">{app.data?.status === 'pending' ? 'View application' : 'Continue'}</Button></Link></div> :
@@ -30,9 +30,9 @@ export function EngineerReviews() {
   const r = useQuery<Review>('reviews', () => [where('subjectId', '==', user!.uid), where('direction', '==', 'customer_to_engineer'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(30)], [user!.uid])
   return (
     <div><PageHeader title="Reviews" sub="Your reputation on Thor Computer." />
-      <div className="mb-6 flex items-center gap-4 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-ink/5"><p className="font-display text-5xl text-thor-blue">{prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : '—'}</p><div><Stars value={prof.data?.ratingAvg ?? 0} count={prof.data?.reviewCount ?? 0} /><p className="text-sm text-thor-text">{prof.data?.reviewCount ?? 0} review(s)</p></div></div>
+      <div className="mb-6 flex items-center gap-4 surface p-6"><p className="font-display text-5xl text-thor-blue">{prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : '—'}</p><div><Stars value={prof.data?.ratingAvg ?? 0} count={prof.data?.reviewCount ?? 0} /><p className="text-sm text-thor-text">{prof.data?.reviewCount ?? 0} review(s)</p></div></div>
       {r.loading ? <ListSkeleton rows={2} /> : r.data.length === 0 ? <EmptyState icon={Star} title="No reviews yet" body="Customers can review you after a completed repair." /> :
-        <ul className="divide-y divide-ink/8 rounded-2xl bg-white px-4 shadow-sm ring-1 ring-ink/5">{r.data.map((x, i) => <li key={i} className="py-4"><div className="flex items-center justify-between"><Stars value={x.rating} /><span className="text-xs text-thor-text">{x.reference}</span></div>{x.text && <p className="mt-1.5 text-sm">{x.text}</p>}</li>)}</ul>}</div>)
+        <ul className="divide-y divide-ink/8 surface px-5">{r.data.map((x, i) => <li key={i} className="py-4"><div className="flex items-center justify-between"><Stars value={x.rating} /><span className="text-xs text-thor-text">{x.reference}</span></div>{x.text && <p className="mt-1.5 text-sm">{x.text}</p>}</li>)}</ul>}</div>)
 }
 
 // ---------- availability ----------

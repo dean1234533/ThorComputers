@@ -7,8 +7,8 @@ import { useAuth } from '@/lib/auth'
 import InstallSteps from '@/components/InstallSteps'
 
 const Shell = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="min-h-dvh bg-paper"><header className="bg-thor-blue p-4"><div className="mx-auto flex max-w-3xl items-center justify-between"><Link to="/"><Logo className="h-12" onDark /></Link><Link to="/login" className="text-sm font-medium text-white">Sign in</Link></div></header>
-    <main className="mx-auto max-w-3xl px-5 py-10"><h1 className="mb-6 font-display text-4xl font-semibold text-thor-blue">{title}</h1>{children}</main></div>)
+  <div className="min-h-dvh bg-paper"><header className="border-b border-ink/8 bg-white px-5 py-5"><div className="mx-auto flex max-w-3xl items-center justify-between"><Link to="/"><Logo className="h-12" /></Link><Link to="/login" className="rounded-xl bg-ink px-5 py-2.5 text-xs font-semibold text-white">Sign in</Link></div></header>
+    <main className="mx-auto max-w-3xl px-5 py-14"><h1 className="mb-6 font-display text-4xl font-bold text-ink">{title}</h1>{children}</main></div>)
 
 /** Landing target for the WordPress "Get the Thor Computer App" button. */
 export function InstallPage() {

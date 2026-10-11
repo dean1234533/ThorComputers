@@ -7,8 +7,9 @@ export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Bool
 
 // ---------- brand ----------
 export function Logo({ className = 'h-9', onDark = false }: { className?: string; onDark?: boolean }) {
-  // Official artwork has a blue background, so on light surfaces it is shown as a rounded tile.
-  return <img src="/brand/logo.jpg" alt="Thor Computer Ltd" className={cx(className, 'w-auto max-w-full shrink-0 self-start object-contain rounded-md', onDark && 'ring-1 ring-white/20')} width={500} height={275} />
+  return <span className={cx('brand-logo-3d', onDark && 'brand-logo-3d-dark', className)}>
+    <img src="/brand/logo.jpg" alt="Thor Computer Ltd" className="block h-full w-full rounded-[inherit] object-contain" width={500} height={275} />
+  </span>
 }
 
 // ---------- buttons ----------
@@ -21,7 +22,7 @@ export const Button = forwardRef<HTMLButtonElement, BtnProps>(({ variant = 'prim
   const s = { sm: 'h-9 px-3 text-sm', md: 'h-11 px-5', lg: 'h-13 px-7 text-lg' }[size]
   return (
     <button ref={ref} disabled={disabled || loading} {...p}
-      className={cx('inline-flex items-center justify-center gap-2 rounded-xl font-medium transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none select-none', v, s, className)}>
+      className={cx('ui-button inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none select-none', v, s, className)}>
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}{children}
     </button>
   )
@@ -39,7 +40,7 @@ function Shell({ label, hint, error, id, children }: FieldShell & { id: string; 
     </div>
   )
 }
-const inputCls = 'w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-base text-ink placeholder:text-thor-text/70 transition focus:border-thor-blue focus:outline-none focus:ring-4 focus:ring-thor-sky/30 aria-[invalid=true]:border-bad'
+const inputCls = 'ui-input w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-base text-ink placeholder:text-thor-text/70 transition focus:border-thor-blue focus:outline-none focus:ring-4 focus:ring-thor-sky/30 aria-[invalid=true]:border-bad'
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & FieldShell>(({ label, hint, error, className, ...p }, ref) => {
   const id = useId(); return <Shell {...{ label, hint, error, id }}><input ref={ref} id={id} aria-invalid={!!error} aria-describedby={error ? `${id}-e` : hint ? `${id}-h` : undefined} className={cx(inputCls, 'h-11', className)} {...p} /></Shell>
 })
@@ -104,14 +105,14 @@ export function Avatar({ src, name, size = 44 }: { src?: string | null; name: st
 
 export function EmptyState({ icon: Icon, title, body, action }: { icon: React.ComponentType<{ className?: string }>; title: string; body: string; action?: ReactNode }) {
   return (
-    <div className="mx-auto flex max-w-sm flex-col items-center py-14 text-center">
+    <div className="empty-state mx-auto flex max-w-sm flex-col items-center py-14 text-center">
       <div className="mb-4 grid size-16 place-items-center rounded-full bg-thor-sky/20"><Icon className="size-7 text-thor-blue" /></div>
       <h3 className="font-display text-xl text-ink">{title}</h3><p className="mt-1.5 text-thor-text">{body}</p>{action && <div className="mt-5">{action}</div>}
     </div>
   )
 }
 export const PageHeader = ({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) => (
-  <header className="mb-6 flex items-end justify-between gap-4"><div><h1 className="font-display text-3xl font-semibold text-ink md:text-4xl">{title}</h1>{sub && <p className="mt-1 text-thor-text">{sub}</p>}</div>{action}</header>
+  <header className="page-header flex flex-wrap items-end justify-between gap-4"><div><h1 className="font-display text-3xl font-bold text-ink md:text-[34px]">{title}</h1>{sub && <p className="mt-2 text-sm leading-relaxed text-thor-text">{sub}</p>}</div>{action}</header>
 )
 export const Section = ({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) => (
   <section className="py-5"><div className="mb-3 flex items-center justify-between"><h2 className="font-display text-xl">{title}</h2>{action}</div>{children}</section>

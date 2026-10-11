@@ -26,7 +26,7 @@ function useCounterpart(c?: Conv | null) {
 function Row({ c }: { c: Conv & { id: string } }) {
   const { user } = useAuth(); const p = useCounterpart(c); const unread = c.unread?.[user!.uid] ?? 0
   return (
-    <li><Link to={`/messages/${c.id}`} className="flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5">
+    <li><Link to={`/messages/${c.id}`} className="flex items-center gap-3.5 surface p-5">
       <Avatar src={p.photo} name={p.name} /><div className="min-w-0 flex-1"><div className="flex justify-between gap-2"><p className={cx('truncate', unread ? 'font-bold' : 'font-medium')}>{p.name}</p><span className="shrink-0 text-xs text-thor-text">{when(c.lastMessageAt?.toDate())}</span></div>
         <p className={cx('truncate text-sm', unread ? 'font-medium text-ink' : 'text-thor-text')}>{c.lastMessage ?? p.sub}</p></div>
       {unread > 0 && <span className="grid min-w-6 place-items-center rounded-full bg-thor-orange px-1.5 text-xs font-bold leading-6">{unread}</span>}</Link></li>)

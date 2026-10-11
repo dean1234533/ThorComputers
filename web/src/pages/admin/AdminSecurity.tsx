@@ -59,14 +59,14 @@ export default function AdminSecurity() {
   return (
     <div className="max-w-2xl"><PageHeader title="Security" sub="Two-step verification for your admin account." />
       {loadErr && <p role="alert" className="mb-4 rounded-xl bg-bad/10 p-3 text-sm text-bad">{loadErr}</p>}
-      {st && <div className="mb-4 flex items-start gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-ink/5">
+      {st && <div className="mb-4 flex items-start gap-3 surface p-5">
         {st.sessionHasSecondFactor ? <ShieldCheck className="size-6 shrink-0 text-ok" /> : <ShieldAlert className="size-6 shrink-0 text-warn" />}
         <div className="text-sm"><p className="font-medium">{st.sessionHasSecondFactor ? 'This session is protected by a second factor.' : 'This session did not use a second factor.'}</p><p className="mt-1 text-thor-text">{MODE_TEXT[st.mode]}</p>
           {st.mode === 'enforce' && !st.sessionHasSecondFactor && <p className="mt-2 font-medium text-bad">{factors.length ? 'You are enrolled. Sign out and sign in again, entering your authenticator code, to continue.' : 'Enrol below to regain access to the admin tools.'}</p>}</div>
       </div>}
 
       <Section title="Authenticator app">
-        {factors.length > 0 && <ul className="mb-4 divide-y divide-ink/8 rounded-2xl bg-white px-4 shadow-sm ring-1 ring-ink/5">
+        {factors.length > 0 && <ul className="mb-4 divide-y divide-ink/8 surface px-5">
           {factors.map(f => <li key={f.uid} className="flex items-center justify-between gap-3 py-3"><div><p className="font-medium">{f.displayName ?? 'Authenticator app'}</p><p className="text-xs text-thor-text">Enrolled {new Date(f.enrollmentTime).toLocaleDateString('en-GB')}</p></div>
             <Button variant="ghost" size="sm" loading={busy} disabled={st?.mode === 'enforce' && factors.length <= 1} title={st?.mode === 'enforce' && factors.length <= 1 ? 'You cannot remove your only factor while enforcement is on' : undefined} onClick={() => remove(f.uid)}>Remove</Button></li>)}
         </ul>}
@@ -88,7 +88,7 @@ export default function AdminSecurity() {
 
       {perms.includes('admins.manage') && st?.admins && <Section title="Admin team readiness">
         <p className="mb-3 text-sm text-thor-text">Before a super admin sets <code>REQUIRE_ADMIN_MFA=true</code> on the server, every active admin should be enrolled, or they will be locked out of admin actions until they enrol.</p>
-        <ul className="divide-y divide-ink/8 rounded-2xl bg-white px-4 shadow-sm ring-1 ring-ink/5">
+        <ul className="divide-y divide-ink/8 surface px-5">
           {st.admins.map(a => <li key={a.uid} className="flex items-center justify-between py-3 text-sm"><span>{a.email || a.uid}</span>{a.enrolledFactors ? <Badge tone="ok">Enrolled</Badge> : <Badge tone="warn">Not enrolled</Badge>}</li>)}
         </ul>
         <p className={`mt-3 text-sm font-medium ${notEnrolled.length ? 'text-warn' : 'text-ok'}`}>{notEnrolled.length ? `${notEnrolled.length} admin${notEnrolled.length === 1 ? '' : 's'} not yet enrolled: do not enforce yet.` : 'All admins are enrolled: safe to enforce.'}</p>

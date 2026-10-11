@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, getMultiFactorResolver, TotpMultiFactorGenerator, MultiFactorResolver } from 'firebase/auth'
+import { signInWithEmailAndPassword, getMultiFactorResolver, TotpMultiFactorGenerator, MultiFactorResolver } from 'firebase/auth'
 import { auth, isConfigured } from '@/lib/firebase'
 import { errMsg } from '@/lib/api'
 import { Button, Input } from '@/components/ui'
@@ -17,7 +17,6 @@ export default function Login() {
   const [mfa, setMfa] = useState<MultiFactorResolver | null>(null), [otp, setOtp] = useState('')
   const submit = async (e: FormEvent) => { e.preventDefault(); setBusy(true); setErr('')
     try { await signInWithEmailAndPassword(auth, email.trim(), password); nav(to, { replace: true }) } catch (x) { const r = mfaResolver(x); if (r) setMfa(r); else setErr(friendly(x)) } finally { setBusy(false) } }
-  const google = async () => { setErr(''); try { await signInWithPopup(auth, new GoogleAuthProvider()); nav(to, { replace: true }) } catch (x: any) { const r = mfaResolver(x); if (r) setMfa(r); else if (x?.code !== 'auth/popup-closed-by-user') setErr(friendly(x)) } }
   const verifyOtp = async (e: FormEvent) => { e.preventDefault(); setBusy(true); setErr('')
     try { const hint = mfa!.hints.find(h => h.factorId === TotpMultiFactorGenerator.FACTOR_ID) ?? mfa!.hints[0]
       await mfa!.resolveSignIn(TotpMultiFactorGenerator.assertionForSignIn(hint.uid, otp.trim())); nav(to, { replace: true })
@@ -35,14 +34,12 @@ export default function Login() {
     <AuthLayout title="Welcome back" sub="Sign in to manage your repairs.">
       {!isConfigured && <p className="mb-4 rounded-xl bg-warn/15 p-3 text-sm text-warn">Firebase isn’t configured yet. Copy <code>.env.example</code> to <code>.env</code> and add your project keys.</p>}
       <form onSubmit={submit} className="space-y-4" noValidate>
-        <Input label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} required />
-        <Input label="Password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />
+        <Input label="Email" type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
+        <Input label="Password" type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required />
         {err && <p role="alert" className="text-sm text-bad">{err}</p>}
         <Button type="submit" loading={busy} className="w-full" size="lg">Sign in</Button>
         <div className="text-right"><Link to="/forgot" className="text-sm text-thor-blue hover:underline">Forgot password?</Link></div>
       </form>
-      <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-wide text-thor-text"><span className="h-px flex-1 bg-ink/10" />or<span className="h-px flex-1 bg-ink/10" /></div>
-      <Button variant="soft" onClick={google} className="w-full" size="lg">Continue with Google</Button>
       <p className="mt-6 text-center text-sm text-thor-text">New to Thor Computer? <Link to="/register" className="font-medium text-thor-blue hover:underline">Create an account</Link></p>
     </AuthLayout>
   )

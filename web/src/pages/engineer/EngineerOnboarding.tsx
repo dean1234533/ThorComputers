@@ -56,7 +56,7 @@ export default function EngineerOnboarding() {
   const S = STATUS[status] ?? STATUS.draft
   return (
     <div className="max-w-2xl"><PageHeader title="Your profile" />
-      <div className="mb-6 flex gap-3.5 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-ink/5"><S.icon className="size-7 shrink-0 text-thor-blue" /><div><p className="font-display text-lg">{S.title}</p><p className="text-sm text-thor-text">{status === 'info_requested' || status === 'rejected' ? app.data?.infoRequest || app.data?.decisionNote : S.body}</p></div></div>
+      <div className="mb-6 flex gap-3.5 surface p-6"><S.icon className="size-7 shrink-0 text-thor-blue" /><div><p className="font-display text-lg">{S.title}</p><p className="text-sm text-thor-text">{status === 'info_requested' || status === 'rejected' ? app.data?.infoRequest || app.data?.decisionNote : S.body}</p></div></div>
 
       <Section title="About you">
         <div className="mb-5 flex items-center gap-4"><div className="relative"><Avatar src={p.photoURL} name={p.displayName || 'You'} size={84} />{(editable || approved) && <label className="absolute -bottom-1 -right-1 grid size-8 cursor-pointer place-items-center rounded-full bg-thor-orange"><Camera className="size-4" /><span className="sr-only">Upload profile photo</span><input type="file" accept="image/*" className="sr-only" onChange={e => photo(e.target.files?.[0])} /></label>}</div><p className="text-sm text-thor-text">A clear, friendly headshot builds trust. It’s shown publicly.</p></div>

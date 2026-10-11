@@ -21,7 +21,7 @@ export default function Appointments() {
   const Card = ({ a }: { a: Apt & { id: string } }) => {
     const mine = a.pendingReschedule?.by === user!.uid, theirs = a.status === 'reschedule_requested' && !mine
     return (
-      <li className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-ink/5">
+      <li className="surface p-6">
         <div className="flex items-start justify-between gap-3"><div><p className="font-display text-lg">{fmt(a.startAt.toDate())}</p><p className="mt-1 flex flex-wrap gap-x-4 text-sm text-thor-text"><span className="flex items-center gap-1"><Clock className="size-4" />{a.durationMinutes} min</span><span className="flex items-center gap-1"><MapPin className="size-4" />{SERVICE_METHODS.find(m => m.id === a.method)?.label}</span><span>{a.reference}</span></p></div>
           <Badge tone={a.status === 'confirmed' ? 'ok' : a.status === 'cancelled' ? 'bad' : 'warn'}>{a.status.replace('_', ' ')}</Badge></div>
         {a.status === 'reschedule_requested' && a.pendingReschedule && <p className="mt-3 rounded-xl bg-warn/10 p-3 text-sm">{mine ? 'You proposed' : 'Proposed new time:'} <b>{fmt(a.pendingReschedule.startAt.toDate())}</b>{mine && ' (awaiting reply)'}</p>}
