@@ -1,0 +1,14 @@
+/* Matches thorcomputer.com Elementor kit: blue #225AA5, sky #6EC1E4, orange #FF8F34, Roboto. Scoped with .thor-app* so it cannot affect the theme. */
+.thor-app-wrap{margin:1em 0}.thor-app-align-center{text-align:center}.thor-app-align-right{text-align:right}
+.thor-app-btn{display:inline-block;font-family:Roboto,sans-serif;font-weight:600;font-size:16px;line-height:1.2;padding:14px 26px;border-radius:10px;text-decoration:none!important;transition:transform .15s,background-color .15s;border:2px solid #225AA5;min-height:44px;box-sizing:border-box}
+.thor-app-btn:hover{transform:translateY(-1px)}.thor-app-btn:focus-visible{outline:3px solid #6EC1E4;outline-offset:2px}
+.thor-app-btn--solid{background:#225AA5;color:#fff!important}.thor-app-btn--solid:hover{background:#1A4680}
+.thor-app-btn--outline{background:transparent;color:#225AA5!important}.thor-app-btn--outline:hover{background:#225AA5;color:#fff!important}
+.thor-app-btn--cta{background:#FF8F34;border-color:#FF8F34;color:#12233D!important}.thor-app-btn--cta:hover{background:#E57412;border-color:#E57412}
+.thor-app-banner{background:#225AA5;color:#fff;padding:40px 20px;margin:0}
+.thor-app-banner__in{max-width:1140px;margin:0 auto;display:flex;gap:24px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.thor-app-banner h2{margin:0 0 8px;color:#fff;font-family:"Roboto Slab",serif;font-size:28px}.thor-app-banner p{margin:0;max-width:560px;color:rgba(255,255,255,.88)}
+.thor-app-float{position:fixed;bottom:20px;z-index:9999;background:#FF8F34;color:#12233D!important;font:700 15px Roboto,sans-serif;padding:13px 20px;border-radius:999px;text-decoration:none!important;box-shadow:0 6px 20px rgba(0,0,0,.25);min-height:44px;box-sizing:border-box}
+.thor-app-float--right{right:20px}.thor-app-float--left{left:20px}.thor-app-float:hover{background:#E57412}
+@media (max-width:600px){.thor-app-banner__in{flex-direction:column;align-items:flex-start}.thor-app-banner .thor-app-btn{width:100%;text-align:center}}
+@media (prefers-reduced-motion:reduce){.thor-app-btn{transition:none}}

@@ -1,0 +1,162 @@
+rules_version = '2';
+// Thor Computer: authorisation lives here and in Cloud Functions, never in the frontend.
+// Claims set only by Cloud Functions: role ('customer'|'engineer'|'admin'), adminLevel, perms[],
+// engineerApproved (bool), specs[] (approved engineer specialisation ids).
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function isAdmin() { return signedIn() && request.auth.token.role == 'admin'; }
+    function can(p) { return isAdmin() && (p in request.auth.token.perms); }
+    function isEngineer() { return signedIn() && request.auth.token.role == 'engineer'; }
+    function approvedEngineer() { return isEngineer() && request.auth.token.engineerApproved == true; }
+    function notSuspended() { return request.auth.token.suspended != true; }
+    function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+
+    // ---------- users (private) ----------
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || can('customers.manage'));
+      // Creation/role/status are server-only (completeRegistration). Users edit a safe subset.
+      allow update: if signedIn() && uid() == userId && notSuspended()
+        && onlyChanges(['fullName','phone','postcode','photoURL','notificationPrefs','privacy','updatedAt'])
+        && request.resource.data.fullName is string && request.resource.data.fullName.size() <= 80;
+      allow create, delete: if false;
+    }
+
+    // ---------- engineer public profile (written by functions only) ----------
+    match /engineerProfiles/{engineerId} {
+      // Only approved profiles are public; applicants/suspended engineers are visible to themselves and reviewers.
+      allow read: if signedIn() && (resource.data.status == 'approved' || uid() == engineerId || can('engineers.review'));
+      allow write: if false;
+      // Private working data: availability, contact preferences. Owner + admin only.
+      match /private/{doc} {
+        allow read: if signedIn() && (uid() == engineerId || can('engineers.review'));
+        allow write: if signedIn() && uid() == engineerId && approvedEngineer() && doc == 'availability';
+      }
+    }
+
+    // ---------- applications & qualification metadata ----------
+    match /engineerApplications/{engineerId} {
+      allow read: if signedIn() && (uid() == engineerId || can('engineers.review'));
+      // Draft editing only; submission/status changes go through submitEngineerApplication().
+      allow create: if signedIn() && uid() == engineerId && isEngineer() && notSuspended()
+        && request.resource.data.keys().hasOnly(['status','profile','createdAt','updatedAt'])
+        && request.resource.data.status == 'draft';
+      allow update: if signedIn() && uid() == engineerId && isEngineer() && notSuspended()
+        && resource.data.status in ['draft','info_requested']
+        && onlyChanges(['profile','updatedAt']);
+      allow delete: if false;
+    }
+    match /engineerQualifications/{qid} {
+      allow read: if signedIn() && (resource.data.engineerId == uid() || can('engineers.review'));
+      // Uploads start unverified; only verifyQualification() can change that.
+      allow create: if isEngineer() && notSuspended() && request.resource.data.engineerId == uid()
+        && request.resource.data.verification == 'pending'
+        && request.resource.data.storagePath.matches('qualifications/' + uid() + '/.*');
+      allow delete: if signedIn() && resource.data.engineerId == uid() && resource.data.verification != 'verified';
+      allow update: if false;
+    }
+
+    // ---------- repair requests ----------
+    match /repairRequests/{jobId} {
+      // Marketplace-safe data only (approximate location, no PII). Private details live in /private/details.
+      allow read: if signedIn() && (
+        resource.data.customerId == uid()
+        || resource.data.selectedEngineerId == uid()
+        || can('jobs.manage')
+        // Approved engineers can list OPEN jobs. These documents hold no PII (approximate area only). Specialisation matching is
+        // applied by the app's query and enforced again in submitQuote(); rules cannot express array intersection for list queries.
+        || (approvedEngineer() && resource.data.status == 'open')
+      );
+      allow write: if false; // createRepairRequest / updateJobStatus / acceptQuote only
+      match /private/{doc} {
+        // Exact address is released only to the customer, the selected engineer and authorised admins.
+        allow read: if signedIn() && (
+          get(/databases/$(db)/documents/repairRequests/$(jobId)).data.customerId == uid()
+          || (get(/databases/$(db)/documents/repairRequests/$(jobId)).data.selectedEngineerId == uid()
+              && get(/databases/$(db)/documents/repairRequests/$(jobId)).data.status != 'open')
+          || can('jobs.manage'));
+        allow write: if false;
+      }
+    }
+
+    // ---------- quotes ----------
+    match /repairQuotes/{quoteId} {
+      allow read: if signedIn() && (resource.data.engineerId == uid() || resource.data.customerId == uid() || can('jobs.manage'));
+      allow write: if false; // submitQuote / updateQuote / withdrawQuote / acceptQuote
+    }
+
+    // ---------- appointments & slot locks ----------
+    match /appointments/{id} {
+      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('jobs.manage'));
+      allow write: if false;
+    }
+    match /appointmentSlots/{id} { allow read, write: if false; }
+
+    // ---------- messaging ----------
+    match /conversations/{cid} {
+      allow read: if signedIn() && uid() in resource.data.participants;   // admins go through audited callable
+      allow create, delete: if false;
+      // Only own read marker may be updated client-side.
+      allow update: if signedIn() && uid() in resource.data.participants
+        && onlyChanges(['lastReadAt','unread']) && request.resource.data.unread.diff(resource.data.unread).affectedKeys().hasOnly([uid()])
+        && request.resource.data.unread[uid()] == 0;
+      match /messages/{mid} {
+        allow read: if signedIn() && uid() in get(/databases/$(db)/documents/conversations/$(cid)).data.participants;
+        allow create: if signedIn() && notSuspended()
+          && uid() in get(/databases/$(db)/documents/conversations/$(cid)).data.participants
+          && get(/databases/$(db)/documents/conversations/$(cid)).data.closed != true
+          && request.resource.data.senderId == uid()
+          && request.resource.data.keys().hasOnly(['senderId','text','imagePath','createdAt','readBy'])
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.readBy == [uid()];
+        allow update: if signedIn() && uid() in get(/databases/$(db)/documents/conversations/$(cid)).data.participants
+          && onlyChanges(['readBy']) && uid() in request.resource.data.readBy;
+        allow delete: if false;
+      }
+    }
+
+    // ---------- reviews ----------
+    match /reviews/{rid} {
+      // Customer->engineer reviews are public once published; engineer->customer feedback is private to subject/author/admin.
+      allow read: if signedIn() && (
+        (resource.data.direction == 'customer_to_engineer' && resource.data.status == 'published')
+        || resource.data.authorId == uid() || resource.data.subjectId == uid() || can('reviews.moderate'));
+      allow write: if false; // submitReview / editReview / moderateReview
+    }
+
+    // ---------- notifications ----------
+    match /notifications/{nid} {
+      allow read: if signedIn() && resource.data.userId == uid();
+      allow update: if signedIn() && resource.data.userId == uid() && onlyChanges(['read','readAt']);
+      allow create, delete: if false;
+    }
+    match /deviceTokens/{tid} {
+      allow read: if signedIn() && resource.data.userId == uid();
+      allow create: if signedIn() && request.resource.data.userId == uid()
+        && request.resource.data.keys().hasOnly(['userId','token','platform','createdAt','lastSeenAt','userAgent']);
+      allow update: if signedIn() && resource.data.userId == uid() && request.resource.data.userId == uid();
+      allow delete: if signedIn() && resource.data.userId == uid();
+    }
+
+    // ---------- reports, audit, settings, integration ----------
+    match /reports/{id} {
+      allow create: if signedIn() && notSuspended() && request.resource.data.reporterId == uid()
+        && request.resource.data.status == 'open'
+        && request.resource.data.reason is string && request.resource.data.reason.size() <= 1000;
+      allow read: if signedIn() && (resource.data.reporterId == uid() || can('reviews.moderate') || can('customers.manage'));
+      allow update, delete: if false;
+    }
+    match /auditLogs/{id} { allow read: if can('messages.audit') || can('admins.manage'); allow write: if false; }
+    match /platformSettings/{doc} {
+      allow read: if doc == 'public' || can('settings.edit');   // 'public' = categories, support info, booking rules
+      allow write: if false;
+    }
+    match /integrationEvents/{id} { allow read: if can('settings.edit'); allow write: if false; }
+    match /enquiries/{id} { allow read, write: if false; }   // WordPress intake, claimed via callable
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

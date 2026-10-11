@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* Brand tokens, taken from thorcomputer.com (Elementor kit 9 + logo artwork). */
+@theme {
+  --color-thor-blue: #225AA5;      /* e-global-color-828fcf1, logo background */
+  --color-thor-blue-700: #1A4680;
+  --color-thor-blue-900: #0F2A4D;
+  --color-thor-sky: #6EC1E4;       /* e-global-color-primary */
+  --color-thor-cyan: #14E1F0;      /* logo line-art highlight (sampled) */
+  --color-thor-orange: #FF8F34;    /* e-global-color-accent: call-to-action */
+  --color-thor-orange-600: #E57412;
+  --color-thor-slate: #54595F;     /* e-global-color-secondary */
+  --color-thor-text: #7A7A7A;      /* e-global-color-text */
+  --color-ink: #12233D;
+  --color-paper: #F6F8FB;
+  --color-ok: #1F9D6B;
+  --color-warn: #C98A00;
+  --color-bad: #CF2E2E;
+  --font-sans: "Roboto", system-ui, sans-serif;
+  --font-display: "Roboto Slab", Georgia, serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body { @apply bg-paper text-ink font-sans antialiased; overscroll-behavior-y: none; }
+:focus-visible { outline: 3px solid var(--color-thor-sky); outline-offset: 2px; border-radius: 6px; }
+.safe-b { padding-bottom: env(safe-area-inset-bottom); }
+.safe-t { padding-top: env(safe-area-inset-top); }
+
+@keyframes shimmer { 100% { transform: translateX(100%); } }
+.skeleton { position: relative; overflow: hidden; background: #E3E9F1; border-radius: 10px; }
+.skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.65), transparent); animation: shimmer 1.4s infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

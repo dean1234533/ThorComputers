@@ -1,0 +1,18 @@
+{
+  "name": "thor-rules-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-thor \"node --test --test-concurrency=1 rules.test.mjs storage.rules.test.mjs\"",
+    "test": "npm run test:rules",
+    "test:smoke": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node smoke.mjs\"",
+    "test:browser": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node browser.mjs\"",
+    "test:smoke:mfa": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node smoke-mfa.mjs\"",
+    "test:wp": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node wp-plugin.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.0",
+    "firebase": "^11.0.0",
+    "puppeteer-core": "^25.13.0"
+  }
+}
