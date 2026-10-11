@@ -46,12 +46,10 @@ Lockout safety: `adminMfaStatus` and the Security page deliberately need no seco
 
 Known gap: enforcement is in Cloud Functions. Firestore rules read the same token but do not check for a second factor, so a password-only admin session could still read data that rules allow (users, jobs, audit log). Treat MFA as protecting actions, not reads, until rules are extended.
 
-## 5. Frontend on Cloudflare Pages
-Build settings: root `web`, command `npm ci && npm run build`, output `dist`. Add the `VITE_FIREBASE_*` variables and `VITE_FIREBASE_VAPID_KEY` (these are public client keys).
-```bash
-cd web && npm run build && npx wrangler pages deploy dist --project-name thor-computer-app
-```
-Custom domain **(needs approval)**: Pages → Custom domains → `app.thorcomputer.com`. If `thorcomputer.com` DNS is on Cloudflare this adds a CNAME automatically; otherwise add `CNAME app → <project>.pages.dev` at the current DNS host. The WordPress site at the apex is untouched. HTTPS is automatic.
+## 5. Frontend on Cloudflare
+Connected to GitHub (root directory `web`, build command `npm ci && npm run build`, deploy command `npx wrangler deploy`), Cloudflare builds on every push. `web/wrangler.jsonc` serves `dist` as a single-page app (unknown paths fall back to `index.html`; `public/_headers` still applies). Add the `VITE_FIREBASE_*` variables and `VITE_FIREBASE_VAPID_KEY` as **build variables** (public client keys); they are baked in at build time, so redeploy after changing them. Manual deploy: `cd web && npm run build && npx wrangler deploy`.
+
+Custom domain **(needs approval)**: the project's Settings → Domains & Routes → `app.thorcomputer.com`. If `thorcomputer.com` DNS is on Cloudflare this adds a CNAME automatically; otherwise add `CNAME app → <project>.pages.dev` at the current DNS host. The WordPress site at the apex is untouched. HTTPS is automatic.
 
 `web/public/_headers` ships the CSP as **Report-Only**. Exercise sign-in (Google popup), uploads and push in staging, fix any reported violations, then rename it to `Content-Security-Policy`.
 

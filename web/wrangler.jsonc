@@ -2,5 +2,9 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "thor-computer-app",
   "compatibility_date": "2026-10-01",
-  "pages_build_output_dir": "./dist"
+  // Static single-page app served from the Vite build. Unknown paths fall back to index.html so /customer, /login etc. work on refresh.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
 }
