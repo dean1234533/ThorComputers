@@ -9,10 +9,10 @@ import { geocode, miles, LatLng } from '@/lib/geo'
 import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Section, Select, StatusPill, Textarea, useToast, cx } from '@/components/ui'
 import { StorageImg } from '@/components/StorageImg'
 import { Quote } from '@/components/QuoteCompare'
-import { DEVICE_TYPES, SERVICE_METHODS, gbp, JobStatus, ENGINEER_NEXT, JOB_STATUS_LABEL } from '@/types/domain'
+import { DEVICE_TYPES, SERVICE_METHODS, gbp, JobStatus, ENGINEER_NEXT, JOB_STATUS_LABEL, commissionPence, JobPayment } from '@/types/domain'
 import ReviewSheet from '@/components/ReviewSheet'
 
-interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; summary: string; description: string; issues: string[]; urgency: 'flexible' | 'soon' | 'urgent'; serviceMethods: string[]; location: { area: string; lat: number; lng: number }; photoPaths: string[]; quoteCount: number; createdAt?: { toDate(): Date }; selectedEngineerId?: string; acceptedQuoteId?: string; customerId: string; agreedTotalPence?: number; agreedMethod?: string }
+interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; summary: string; description: string; issues: string[]; urgency: 'flexible' | 'soon' | 'urgent'; serviceMethods: string[]; location: { area: string; lat: number; lng: number }; photoPaths: string[]; quoteCount: number; createdAt?: { toDate(): Date }; selectedEngineerId?: string; acceptedQuoteId?: string; customerId: string; agreedTotalPence?: number; agreedMethod?: string; payment?: JobPayment; commissionBps?: number; pendingRevision?: { additionalPence: number; reason: string; status: string } | null }
 const age = (d?: Date) => { if (!d) return ''; const h = (Date.now() - d.getTime()) / 3600_000; return h < 1 ? 'Just now' : h < 24 ? `${Math.floor(h)}h ago` : `${Math.floor(h / 24)}d ago` }
 const devLabel = (t: string) => DEVICE_TYPES.find(d => d.id === t)?.label ?? t
 
@@ -53,23 +53,26 @@ export function JobDetail() {
   const { id } = useParams(); const { user } = useAuth(); const toast = useToast(); const nav = useNavigate()
   const { data: job, loading, error } = useDoc<Job>(`repairRequests/${id}`)
   const mine = useDoc<Quote>(`repairQuotes/${id}_${user!.uid}`)
-  const [f, setF] = useState({ repair: '', diag: '', callout: '', hours: '1', avail: '', parts: true, partsNote: '', warranty: '', notes: '', expiry: new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10), method: '' }); const [busy, setBusy] = useState('')
+  const settings = useDoc<{ payments?: { enabled: boolean; commissionBps: number } }>('platformSettings/public')
+  const [f, setF] = useState({ labour: '', partsEst: '', earliest: '', included: '', excluded: '', diag: '', callout: '', hours: '1', avail: '', parts: true, partsNote: '', warranty: '', notes: '', expiry: new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10), method: '' }); const [busy, setBusy] = useState('')
   const q = mine.data
-  useEffect(() => { if (q && q.status === 'submitted') setF(s => ({ ...s, repair: String(q.repairPence / 100), diag: String(q.diagnosticPence / 100 || ''), callout: String(q.calloutPence / 100 || ''), hours: String(q.durationHours), avail: q.availability, parts: q.partsIncluded, partsNote: q.partsNote ?? '', warranty: q.warranty ?? '', notes: q.notes ?? '', method: q.serviceMethod, expiry: q.expiresAt.toDate().toISOString().slice(0, 10) })) }, [q?.version, q?.status]) // eslint-disable-line
+  useEffect(() => { if (q && q.status === 'submitted') setF(s => ({ ...s, labour: String((q.labourPence ?? q.repairPence) / 100), partsEst: String((q.partsEstimatePence ?? 0) / 100 || ''), earliest: q.earliestAppointment ?? '', included: q.includedServices ?? '', excluded: q.excludedServices ?? '', diag: String(q.diagnosticPence / 100 || ''), callout: String(q.calloutPence / 100 || ''), hours: String(q.durationHours), avail: q.availability, parts: q.partsIncluded, partsNote: q.partsNote ?? '', warranty: q.warranty ?? '', notes: q.notes ?? '', method: q.serviceMethod, expiry: q.expiresAt.toDate().toISOString().slice(0, 10) })) }, [q?.version, q?.status]) // eslint-disable-line
   useEffect(() => { if (job && !f.method) setF(s => ({ ...s, method: job.serviceMethods[0] })) }, [job]) // eslint-disable-line
-  const total = poundsToPence(f.repair) + poundsToPence(f.diag) + poundsToPence(f.callout)
+  const repair = poundsToPence(f.labour) + poundsToPence(f.partsEst)
+  const total = repair + poundsToPence(f.diag) + poundsToPence(f.callout)
+  const bps = settings.data?.payments?.commissionBps ?? 1500, fee = commissionPence(total, bps)
 
   if (loading || mine.loading) return <ListSkeleton rows={2} />
   if (!job || error) return <EmptyState icon={AlertTriangle} title="Job no longer available" body="It may have been awarded or cancelled." action={<Button onClick={() => nav('/engineer/jobs')}>Back to jobs</Button>} />
   const editable = job.status === 'open' && (!q || ['submitted', 'withdrawn'].includes(q.status))
   const submit = async () => {
     setBusy('send')
-    try { await api.submitQuote({ jobId: job.id, repairPence: poundsToPence(f.repair), diagnosticPence: poundsToPence(f.diag), calloutPence: poundsToPence(f.callout), durationHours: Number(f.hours), availability: f.avail, partsIncluded: f.parts, partsNote: f.partsNote, warranty: f.warranty, notes: f.notes, expiresAt: new Date(f.expiry + 'T23:59:00').toISOString(), serviceMethod: f.method }); toast('ok', q ? 'Quotation updated.' : 'Quotation sent.') }
+    try { await api.submitQuote({ jobId: job.id, repairPence: repair, labourPence: poundsToPence(f.labour), partsEstimatePence: poundsToPence(f.partsEst), earliestAppointment: f.earliest || undefined, includedServices: f.included, excludedServices: f.excluded, diagnosticPence: poundsToPence(f.diag), calloutPence: poundsToPence(f.callout), durationHours: Number(f.hours), availability: f.avail, partsIncluded: f.parts, partsNote: f.partsNote, warranty: f.warranty, notes: f.notes, expiresAt: new Date(f.expiry + 'T23:59:00').toISOString(), serviceMethod: f.method }); toast('ok', q ? 'Quotation updated.' : 'Quotation sent.') }
     catch (e) { toast('bad', errMsg(e)) } finally { setBusy('') }
   }
   return (
     <ApprovalGate><div className="max-w-2xl">
-      <div className="mb-1 flex items-center gap-3"><p className="text-sm text-thor-text">{job.reference}</p><StatusPill status={job.status} /></div>
+      <div className="mb-1 flex items-center gap-3"><p className="text-sm text-thor-text">{job.reference}</p><StatusPill status={job.status} quoteCount={job.quoteCount} /></div>
       <h1 className="font-display text-3xl">{devLabel(job.device.type)} · {job.device.manufacturer} {job.device.model}</h1>
       <p className="mt-1 flex items-center gap-1.5 text-sm text-thor-text"><MapPin className="size-4" />{job.location.area} · posted {age(job.createdAt?.toDate())}</p>
       <Section title="The problem"><p className="whitespace-pre-line">{job.description}</p>{job.issues.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{job.issues.map(i => <Badge key={i} tone="info">{i}</Badge>)}</div>}
@@ -79,8 +82,11 @@ export function JobDetail() {
       {q && !editable && <p className="rounded-xl bg-paper p-4 text-sm">Your quote of <b>{gbp(q.totalPence)}</b> is <b>{q.status}</b>.</p>}
       {editable && <Section title={q?.status === 'submitted' ? 'Your quotation' : 'Send a quotation'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3"><Input label="Repair (£)" inputMode="decimal" value={f.repair} onChange={e => setF({ ...f, repair: e.target.value })} /><Input label="Diagnostic (£)" inputMode="decimal" value={f.diag} onChange={e => setF({ ...f, diag: e.target.value })} /><Input label="Call-out (£)" inputMode="decimal" value={f.callout} onChange={e => setF({ ...f, callout: e.target.value })} /></div>
-          <p className={cx('rounded-xl px-4 py-3 text-sm', total > 0 ? 'bg-thor-sky/20 text-thor-blue-700' : 'bg-paper text-thor-text')}>The customer will pay <b className="text-lg">{gbp(total)}</b> in total.</p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4"><Input label="Labour (£)" inputMode="decimal" value={f.labour} onChange={e => setF({ ...f, labour: e.target.value })} /><Input label="Parts estimate (£)" inputMode="decimal" value={f.partsEst} onChange={e => setF({ ...f, partsEst: e.target.value })} /><Input label="Diagnostic fee (£)" inputMode="decimal" value={f.diag} onChange={e => setF({ ...f, diag: e.target.value })} /><Input label="Call-out fee (£)" inputMode="decimal" value={f.callout} onChange={e => setF({ ...f, callout: e.target.value })} /></div>
+          <div className={cx('rounded-xl px-4 py-3 text-sm', total > 0 ? 'bg-thor-sky/20 text-thor-blue-700' : 'bg-paper text-thor-text')}><p>Repair price {gbp(repair)} · the customer pays <b className="text-lg">{gbp(total)}</b> in total.</p>
+            {settings.data?.payments?.enabled && total > 0 && <p className="mt-1 text-xs">Thor Computer commission {(bps / 100).toFixed(bps % 100 ? 2 : 0)}% ({gbp(fee)}). You receive <b>{gbp(total - fee)}</b> before Stripe adjustments. The rate is fixed when you send this quote.</p>}</div>
+          <div className="grid grid-cols-2 gap-3"><Input label="Earliest appointment" type="date" min={new Date().toISOString().slice(0, 10)} value={f.earliest} onChange={e => setF({ ...f, earliest: e.target.value })} /><div /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="Included services" placeholder="e.g. diagnosis, screen fitting, testing" value={f.included} onChange={e => setF({ ...f, included: e.target.value })} /><Input label="Excluded services" placeholder="e.g. data backup" value={f.excluded} onChange={e => setF({ ...f, excluded: e.target.value })} /></div>
           <div className="grid grid-cols-2 gap-3"><Input label="Estimated hours" type="number" step="0.25" min="0.25" value={f.hours} onChange={e => setF({ ...f, hours: e.target.value })} /><Select label="Service method" value={f.method} onChange={e => setF({ ...f, method: e.target.value })}>{job.serviceMethods.map(m => <option key={m} value={m}>{SERVICE_METHODS.find(s => s.id === m)?.label}</option>)}</Select></div>
           <Input label="Your availability" value={f.avail} onChange={e => setF({ ...f, avail: e.target.value })} />
           <label className="flex items-center gap-3 text-sm"><input type="checkbox" className="size-5 accent-thor-blue" checked={f.parts} onChange={e => setF({ ...f, parts: e.target.checked })} />Parts are included in this price</label>
@@ -117,7 +123,8 @@ export function MyJobDetail() {
   const { id } = useParams(); const toast = useToast()
   const { data: job, loading } = useDoc<Job>(`repairRequests/${id}`)
   const priv = useDoc<{ addressLine?: string; postcode: string; accessNotes?: string; serialNumber?: string }>(job && job.status !== 'open' ? `repairRequests/${id}/private/details` : null)
-  const [busy, setBusy] = useState(''); const [rev, setRev] = useState(false)
+  const [busy, setBusy] = useState(''); const [rev, setRev] = useState(false); const [extra, setExtra] = useState({ amount: '', reason: '' }); const [reply, setReply] = useState('')
+  const dispute = useDoc<{ complaint: string; engineerResponse?: string | null; status: string; resolution?: { text: string } | null }>(job?.status === 'disputed' ? `disputes/${id}` : null)
   const done = useDoc(job && ['completed', 'closed'].includes(job.status) ? `reviews/${id}_engineer_to_customer` : null)
   if (loading) return <ListSkeleton rows={2} />
   if (!job) return <EmptyState icon={AlertTriangle} title="Job not found" body="You may not have access to this job." />
@@ -133,6 +140,15 @@ export function MyJobDetail() {
           {priv.data?.accessNotes && <div className="flex justify-between gap-4"><dt className="text-thor-text">Access</dt><dd className="text-right">{priv.data.accessNotes}</dd></div>}
           {priv.data?.serialNumber && <div className="flex justify-between"><dt className="text-thor-text">Serial</dt><dd>{priv.data.serialNumber}</dd></div>}</dl>
         <p className="mt-2 text-xs text-thor-text">Customer details are for this job only. Please keep communication within Thor Computer.</p></Section>
+      {job.payment?.required && <p className="mb-4 rounded-xl bg-paper p-3 text-sm">Customer payment: <b>{job.payment.status.replace('_', ' ')}</b> · {gbp(job.payment.paidPence ?? 0)} of {gbp(job.agreedTotalPence ?? 0)} received{job.status === 'awaiting_payment' ? '. The customer can book once payment is confirmed.' : '.'}</p>}
+      {['engineer_selected', 'awaiting_payment', 'appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts'].includes(job.status) && <Section title="Additional work">
+        {job.pendingRevision?.status === 'pending' ? <p className="rounded-xl bg-warn/10 p-3 text-sm">Waiting for the customer to approve an extra {gbp(job.pendingRevision.additionalPence)}.</p> :
+          <div className="space-y-3"><p className="text-sm text-thor-text">Found more work? Propose a revised quotation. The customer must approve it before anything extra is charged.</p>
+            <div className="grid gap-3 sm:grid-cols-[10rem_1fr]"><Input label="Extra amount (£)" inputMode="decimal" value={extra.amount} onChange={e => setExtra({ ...extra, amount: e.target.value })} /><Input label="What and why" value={extra.reason} onChange={e => setExtra({ ...extra, reason: e.target.value })} /></div>
+            <Button variant="soft" disabled={poundsToPence(extra.amount) < 100 || extra.reason.trim().length < 10} loading={busy === 'rev'} onClick={async () => { setBusy('rev'); try { await api.proposeQuoteRevision({ jobId: job.id, additionalPence: poundsToPence(extra.amount), reason: extra.reason.trim() }); setExtra({ amount: '', reason: '' }); toast('ok', 'Revision sent to the customer.') } catch (e) { toast('bad', errMsg(e)) } finally { setBusy('') } }}>Send revised quotation</Button></div>}</Section>}
+      {dispute.data && <Section title="Customer raised a problem"><div className="space-y-3 text-sm"><p className="rounded-xl bg-warn/10 p-3">{dispute.data.complaint}</p>
+        {dispute.data.engineerResponse ? <p><b>Your response:</b> {dispute.data.engineerResponse}</p> : <><Textarea label="Your response" value={reply} onChange={e => setReply(e.target.value)} maxLength={2000} /><Button disabled={reply.trim().length < 10} loading={busy === 'disp'} onClick={async () => { setBusy('disp'); try { await api.respondToDispute({ jobId: job.id, response: reply.trim() }); toast('ok', 'Response sent to Thor Computer.') } catch (e) { toast('bad', errMsg(e)) } finally { setBusy('') } }}>Send response</Button></>}
+        {dispute.data.resolution && <p className="rounded-xl bg-ok/10 p-3"><b>Decision:</b> {dispute.data.resolution.text}</p>}</div></Section>}
       <div className="flex flex-wrap gap-3"><Link to={`/messages/${job.acceptedQuoteId}`}><Button variant="soft"><MessageSquare className="size-4" />Message customer</Button></Link>
         {['completed', 'closed'].includes(job.status) && !done.data && <Button variant="soft" onClick={() => setRev(true)}>Leave feedback</Button>}</div>
       <ReviewSheet open={rev} onClose={() => setRev(false)} jobId={job.id} direction="engineer_to_customer" /></div>)

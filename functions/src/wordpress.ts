@@ -13,6 +13,10 @@ const Body = z.object({
     phone: z.string().trim().max(30).optional().default(''), postal_code: z.string().trim().toUpperCase().max(10).optional().default(''),
     brand: z.string().trim().max(60).optional().default(''), model: z.string().trim().max(80).optional().default(''),
     serial_n: z.string().trim().max(60).optional().default(''), problem: z.string().trim().min(5).max(2000),
+    // Optional, sent by the native [thor_repair_form]; invalid values are dropped rather than rejecting the enquiry.
+    device_type: z.enum(['laptop', 'desktop', 'gaming_pc', 'mac', 'phone', 'tablet', 'printer', 'other']).optional().catch(undefined),
+    service_method: z.enum(['home', 'office', 'remote', 'collection', 'workshop']).optional().catch(undefined),
+    urgency: z.enum(['flexible', 'soon', 'urgent']).optional().catch(undefined),
   }),
 })
 
@@ -39,7 +43,7 @@ export const wpIntake = onRequest({ region: REGION, cors: false }, async (req, r
 
   const token = randomBytes(24).toString('hex')
   try {
-    await ref.create({ source: 'wordpress', submissionId, status: 'awaiting_customer', fields, email: fields.email, emailHash, tokenHash: sha(token), createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 14 * 86400_000), consentAt: FieldValue.serverTimestamp() })
+    await ref.create({ source: 'wordpress', submissionId, status: 'awaiting_customer', fields: Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined)), email: fields.email, emailHash, tokenHash: sha(token), createdAt: FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 14 * 86400_000), consentAt: FieldValue.serverTimestamp() })
   } catch (e: any) {
     if (e.code === 6) { res.status(200).json({ ok: true, duplicate: true }); return }   // WordPress retried: do nothing, no second email
     throw e

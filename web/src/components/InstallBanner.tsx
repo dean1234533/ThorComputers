@@ -39,8 +39,8 @@ export default function InstallBanner() {
           className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-xl overflow-hidden rounded-3xl bg-thor-blue text-white shadow-2xl md:bottom-6 md:left-auto md:right-6">
           <div className="flex items-center gap-4 p-5">
             <div className="min-w-0 flex-1"><Logo className="mb-3 h-9" onDark />
-              <h2 id="ib-t" className="font-display text-xl font-semibold">Take Thor Computer With You</h2>
-              <p className="mt-1.5 text-sm leading-relaxed text-white/80">Install the Thor Computer app for faster access to repair requests, engineer quotations, bookings and updates.</p>
+              <h2 id="ib-t" className="font-display text-xl font-semibold">Install Thor Computer</h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-white/80">Manage your repair jobs, receive instant quotations and never miss an appointment.</p>
             </div>
             <PhonePreview />
           </div>

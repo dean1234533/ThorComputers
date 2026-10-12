@@ -9,6 +9,7 @@ import { NAV, NavItem } from './nav'
 import { Logo, Sheet, cx, Avatar, Spinner } from '@/components/ui'
 import InstallBanner from '@/components/InstallBanner'
 import NotificationPrompt from '@/components/NotificationPrompt'
+import AssistantWidget from '@/components/AssistantWidget'
 
 function useBadges() {
   const { user } = useAuth()
@@ -22,11 +23,11 @@ const Badge = ({ n }: { n: number }) => n > 0 ? (
     className="absolute -right-2 -top-1.5 grid min-w-5 place-items-center rounded-full bg-thor-orange px-1 text-[11px] font-bold leading-5 text-ink" aria-label={`${n} unread`}>{n > 99 ? '99+' : n}</motion.span>) : null
 
 export default function AppShell() {
-  const { role, profile, signOut } = useAuth()
+  const { role, profile, signOut, perms } = useAuth()
   const badges = useBadges()
   const loc = useLocation()
   const [more, setMore] = useState(false)
-  const items = NAV[role ?? 'customer']
+  const items = NAV[role ?? 'customer'].filter(i => !i.perm || (Array.isArray(i.perm) ? i.perm : [i.perm]).some(p => perms.includes(p)))
   const primary = items.filter(i => i.primary), secondary = items.filter(i => !i.primary)
   const count = (i: NavItem) => (i.badge ? badges[i.badge] : 0)
   const current = items.find(i => i.to === loc.pathname) ?? items.find(i => loc.pathname.startsWith(i.to + '/'))
@@ -87,6 +88,7 @@ export default function AppShell() {
 
       <InstallBanner />
       <NotificationPrompt />
+      <AssistantWidget />
     </div>
   )
 }

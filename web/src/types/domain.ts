@@ -1,13 +1,18 @@
 export type Role = 'customer' | 'engineer' | 'admin'
 export type AdminLevel = 'super_admin' | 'admin' | 'support'
 export type AdminPermission =
-  | 'engineers.review' | 'customers.manage' | 'jobs.manage' | 'reviews.moderate'
+  | 'engineers.review' | 'customers.manage' | 'jobs.manage' | 'jobs.view' | 'reviews.moderate'
   | 'messages.audit' | 'settings.edit' | 'admins.manage' | 'reports.view'
+  | 'finance.view' | 'payments.manage' | 'payments.configure' | 'marketing.view' | 'marketing.manage'
+  | 'leads.manage' | 'disputes.manage' | 'support.handle' | 'chatbot.manage' | 'audit.view'
 
+/** Mirrors functions/src/core.ts ADMIN_DEFAULTS (the server is authoritative). */
+const ALL_PERMS: AdminPermission[] = ['engineers.review', 'customers.manage', 'jobs.manage', 'jobs.view', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view',
+  'finance.view', 'payments.manage', 'payments.configure', 'marketing.view', 'marketing.manage', 'leads.manage', 'disputes.manage', 'support.handle', 'chatbot.manage', 'audit.view']
 export const ADMIN_DEFAULT_PERMISSIONS: Record<AdminLevel, AdminPermission[]> = {
-  super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'],
-  admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view'],
-  support: ['customers.manage', 'reports.view'],
+  super_admin: ALL_PERMS,
+  admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'jobs.view', 'reviews.moderate', 'reports.view', 'leads.manage', 'marketing.view', 'disputes.manage', 'support.handle'],
+  support: ['customers.manage', 'jobs.view', 'reports.view', 'support.handle'],
 }
 
 export const DEVICE_TYPES = [
@@ -40,8 +45,8 @@ export const COMMON_ISSUES = [
 ] as const
 
 export const SERVICE_METHODS = [
-  { id: 'home', label: 'Home visit' }, { id: 'office', label: 'Office visit' }, { id: 'remote', label: 'Remote assistance' },
-  { id: 'collection', label: 'Collection and return' }, { id: 'workshop', label: 'Engineer workshop' },
+  { id: 'home', label: 'Engineer home visit' }, { id: 'office', label: 'Business premises visit' }, { id: 'remote', label: 'Remote assistance' },
+  { id: 'collection', label: 'Collection and return' }, { id: 'workshop', label: 'Workshop repair' },
 ] as const
 export type ServiceMethod = (typeof SERVICE_METHODS)[number]['id']
 
@@ -58,11 +63,11 @@ export const METHODS_FOR_DEVICE: Record<DeviceType, ServiceMethod[]> = {
 }
 
 export type JobStatus =
-  | 'open' | 'engineer_selected' | 'appointment_scheduled' | 'on_the_way' | 'in_progress'
+  | 'awaiting_verification' | 'open' | 'engineer_selected' | 'awaiting_payment' | 'appointment_scheduled' | 'on_the_way' | 'in_progress'
   | 'awaiting_parts' | 'completed' | 'closed' | 'cancelled' | 'disputed'
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
-  open: 'Awaiting quotations', engineer_selected: 'Engineer selected', appointment_scheduled: 'Appointment scheduled',
+  awaiting_verification: 'Awaiting verification', open: 'Open for bidding', engineer_selected: 'Engineer selected', awaiting_payment: 'Awaiting payment', appointment_scheduled: 'Appointment confirmed',
   on_the_way: 'Engineer on the way', in_progress: 'Repair in progress', awaiting_parts: 'Awaiting parts',
   completed: 'Repair completed', closed: 'Closed', cancelled: 'Cancelled', disputed: 'Disputed',
 }
@@ -82,3 +87,20 @@ export type Provider = 'independent' | 'thor'
 
 export const gbp = (pence: number) =>
   new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(pence / 100)
+
+/** "Open for bidding" becomes "Receiving quotations" once the first quote is in. */
+export const jobStatusLabel = (status: JobStatus, quoteCount = 0) => status === 'open' && quoteCount > 0 ? 'Receiving quotations' : JOB_STATUS_LABEL[status] ?? status
+
+export type PaymentPolicy = 'full_before' | 'deposit_before' | 'after_completion'
+export const PAYMENT_POLICY_LABEL: Record<PaymentPolicy, string> = { full_before: 'Full payment before the appointment', deposit_before: 'Deposit before the appointment, balance after the repair', after_completion: 'Payment after the repair is completed' }
+export interface JobPayment { required: boolean; policy: PaymentPolicy; depositPercent: number; paidPence: number; refundedPence: number; status: 'unpaid' | 'deposit_paid' | 'part_paid' | 'paid' | 'not_required' }
+/** Display-only mirror of the server's commission maths (functions/src/domain.ts). */
+export const commissionPence = (amount: number, bps: number) => Math.floor((amount * bps + 5000) / 10000)
+
+export const LEAD_STATUS_LABEL: Record<string, string> = {
+  new: 'New', imported: 'Imported', awaiting_information: 'Awaiting information', awaiting_confirmation: 'Awaiting confirmation', needs_review: 'Needs review', verified: 'Verified',
+  converted_to_job: 'Converted to job', receiving_bids: 'Receiving bids', engineer_selected: 'Engineer selected', converted_to_customer: 'Converted to customer', completed: 'Completed',
+  rejected: 'Rejected', duplicate: 'Duplicate', cancelled: 'Job cancelled',
+}
+export const ENGINEER_STATUS_LABEL: Record<string, string> = { draft: 'Draft', pending: 'Pending', under_review: 'Under review', info_requested: 'Additional information required', approved: 'Approved', rejected: 'Rejected', suspended: 'Suspended' }
+export const pounds = (pence: number) => (pence / 100).toFixed(2)

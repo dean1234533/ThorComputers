@@ -64,7 +64,7 @@ service cloud.firestore {
       allow read: if signedIn() && (
         resource.data.customerId == uid()
         || resource.data.selectedEngineerId == uid()
-        || can('jobs.manage')
+        || can('jobs.manage') || can('jobs.view')
         // Approved engineers can list OPEN jobs. These documents hold no PII (approximate area only). Specialisation matching is
         // applied by the app's query and enforced again in submitQuote(); rules cannot express array intersection for list queries.
         || (approvedEngineer() && resource.data.status == 'open')
@@ -83,13 +83,13 @@ service cloud.firestore {
 
     // ---------- quotes ----------
     match /repairQuotes/{quoteId} {
-      allow read: if signedIn() && (resource.data.engineerId == uid() || resource.data.customerId == uid() || can('jobs.manage'));
+      allow read: if signedIn() && (resource.data.engineerId == uid() || resource.data.customerId == uid() || can('jobs.manage') || can('jobs.view'));
       allow write: if false; // submitQuote / updateQuote / withdrawQuote / acceptQuote
     }
 
     // ---------- appointments & slot locks ----------
     match /appointments/{id} {
-      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('jobs.manage'));
+      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('jobs.manage') || can('jobs.view'));
       allow write: if false;
     }
     match /appointmentSlots/{id} { allow read, write: if false; }
@@ -149,11 +149,66 @@ service cloud.firestore {
       allow read: if signedIn() && (resource.data.reporterId == uid() || can('reviews.moderate') || can('customers.manage'));
       allow update, delete: if false;
     }
-    match /auditLogs/{id} { allow read: if can('messages.audit') || can('admins.manage'); allow write: if false; }
+    match /auditLogs/{id} { allow read: if can('messages.audit') || can('admins.manage') || can('audit.view'); allow write: if false; }
     match /platformSettings/{doc} {
-      allow read: if doc == 'public' || can('settings.edit');   // 'public' = categories, support info, booking rules
+      // 'public' = categories, support info, booking rules, marketplace rules, commission rate and payment policy (nothing secret)
+      allow read: if doc == 'public' || can('settings.edit')
+        || (doc == 'marketing' && (can('marketing.view') || can('leads.manage')))
+        || (doc == 'chatbot' && can('chatbot.manage'));
       allow write: if false;
     }
+
+    // ---------- payments (all written by Cloud Functions from verified Stripe webhooks) ----------
+    match /payments/{id} {
+      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('finance.view') || can('payments.manage') || can('jobs.manage'));
+      allow write: if false;
+    }
+    match /transactions/{id} {
+      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('finance.view'));
+      allow write: if false;
+    }
+    match /payouts/{id} { allow read: if signedIn() && (resource.data.engineerId == uid() || can('finance.view')); allow write: if false; }
+    match /stripeConnectedAccounts/{engineerId} { allow read: if signedIn() && (uid() == engineerId || can('engineers.review') || can('finance.view')); allow write: if false; }
+    match /commissionRecords/{id} { allow read: if can('finance.view'); allow write: if false; }
+    match /commissionHistory/{id} { allow read: if can('finance.view') || can('payments.configure'); allow write: if false; }
+    match /refunds/{id} { allow read: if can('finance.view') || can('payments.manage'); allow write: if false; }
+    match /paymentDisputes/{id} { allow read: if can('finance.view') || can('disputes.manage'); allow write: if false; }
+    match /stripeEvents/{id} { allow read, write: if false; }
+
+    // ---------- disputes, support, deletion requests ----------
+    match /disputes/{jobId} {
+      allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('disputes.manage'));
+      allow write: if false;
+    }
+    match /supportTickets/{tid} {
+      allow read: if signedIn() && (resource.data.userId == uid() || can('support.handle'));
+      allow write: if false;
+      match /messages/{mid} {
+        allow read: if signedIn() && (get(/databases/$(db)/documents/supportTickets/$(tid)).data.userId == uid() || can('support.handle'));
+        allow write: if false;
+      }
+    }
+    match /deletionRequests/{id} { allow read: if signedIn() && (id == uid() || can('customers.manage')); allow write: if false; }
+
+    // ---------- Meta / lead generation (tokens are never readable by any client) ----------
+    match /metaSecrets/{id} { allow read, write: if false; }
+    match /metaOAuthStates/{id} { allow read, write: if false; }
+    match /metaConnections/{id} { allow read: if can('marketing.view') || can('leads.manage'); allow write: if false; }
+    match /metaAdAccounts/{id} { allow read: if can('marketing.view'); allow write: if false; }
+    match /metaCampaigns/{id} { allow read: if can('marketing.view') || can('leads.manage'); allow write: if false; }
+    match /metaInsightsDaily/{id} { allow read: if can('marketing.view'); allow write: if false; }
+    match /metaLeadForms/{id} { allow read: if can('marketing.view') || can('leads.manage'); allow write: if false; }
+    match /leadMappings/{id} { allow read: if can('leads.manage'); allow write: if false; }
+    match /metaLeads/{id} { allow read: if can('leads.manage'); allow write: if false; }
+    match /metaLeadRaw/{id} { allow read: if can('leads.manage'); allow write: if false; }
+    match /metaWebhookEvents/{id} { allow read: if can('leads.manage') || can('marketing.view'); allow write: if false; }
+    match /leadConversionEvents/{id} { allow read: if can('marketing.view') || can('leads.manage'); allow write: if false; }
+    match /integrationHealth/{id} { allow read: if can('settings.edit') || can('marketing.view') || can('finance.view'); allow write: if false; }
+
+    // ---------- assistant ----------
+    match /chatbotStats/{day} { allow read: if can('chatbot.manage'); allow write: if false; }
+    match /chatbotUsage/{id} { allow read, write: if false; }
+    match /counters/{id} { allow read, write: if false; }
     match /integrationEvents/{id} { allow read: if can('settings.edit'); allow write: if false; }
     match /enquiries/{id} { allow read, write: if false; }   // WordPress intake, claimed via callable
 

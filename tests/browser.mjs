@@ -106,7 +106,7 @@ await step('bad password shows a friendly error and stays on /login', async () =
 console.log('\nCustomer')
 const cust = await newSession('customer')
 await step('customer signs in through the UI and lands on /customer', async () => { await login(cust, 'customer@demo.test'); ok(new URL(cust.page.url()).pathname === '/customer', cust.page.url()) })
-for (const p of ['/customer', '/customer/repairs', '/customer/quotations', '/customer/appointments', '/messages', '/notifications', '/profile', '/settings'])
+for (const p of ['/customer', '/customer/repairs', '/customer/quotations', '/customer/appointments', '/messages', '/notifications', '/profile', '/settings', '/support'])
   await step(`customer ${p}`, () => visit(cust, p))
 await step('customer sees the seeded repair and its quote on the repair detail page', async () => {
   await visit(cust, '/customer/repairs/demo-job-open'); const t = await bodyText(cust.page)
@@ -129,7 +129,7 @@ await step('customer signs out cleanly (mobile: via the More sheet)', async () =
 console.log('\nEngineer')
 const eng = await newSession('engineer')
 await step('approved engineer signs in and lands on /engineer', async () => { await login(eng, 'engineer@demo.test'); ok(new URL(eng.page.url()).pathname === '/engineer', eng.page.url()) })
-for (const p of ['/engineer', '/engineer/jobs', '/engineer/quotations', '/engineer/my-jobs', '/engineer/appointments', '/engineer/reviews', '/engineer/profile', '/messages', '/notifications', '/settings'])
+for (const p of ['/engineer', '/engineer/jobs', '/engineer/quotations', '/engineer/my-jobs', '/engineer/appointments', '/engineer/reviews', '/engineer/profile', '/engineer/payouts', '/support', '/messages', '/notifications', '/settings'])
   await step(`engineer ${p}`, () => visit(eng, p))
 await step('engineer sees the open job but NOT the exact address or serial', async () => {
   await visit(eng, '/engineer/jobs/demo-job-open'); const t = await bodyText(eng.page)
@@ -145,7 +145,7 @@ await step('unapproved engineer can reach onboarding but sees no available jobs'
 console.log('\nAdmin (super admin) and support admin')
 const adm = await newSession('superadmin', false)
 await step('super admin signs in and lands on /admin', async () => { await login(adm, 'superadmin@demo.test'); ok(new URL(adm.page.url()).pathname === '/admin', adm.page.url()) })
-for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/notifications', '/settings'])
+for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/admin/leads', '/admin/marketing', '/admin/marketing?tab=campaigns', '/admin/marketing?tab=roi', '/admin/marketing?tab=forms', '/admin/marketing?tab=settings', '/admin/marketing?tab=webhooks', '/admin/finance', '/admin/disputes', '/admin/support', '/notifications', '/settings'])
   await step(`super admin ${p}`, () => visit(adm, p))
 await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
   await visit(adm, '/admin')
@@ -166,7 +166,7 @@ await step('mobile admin navigation stays aligned at 320px and 390px', async () 
 })
 await step('admin is bounced from customer/engineer areas', async () => { await visit(adm, '/customer', { expectPath: '/admin' }) })
 const sup = await newSession('support', false)
-await step('support admin signs in; settings page does not crash', async () => { await login(sup, 'support@demo.test'); await visit(sup, '/admin'); await visit(sup, '/admin/customers'); await visit(sup, '/admin/settings') })
+await step('support admin signs in; settings page does not crash', async () => { await login(sup, 'support@demo.test'); await visit(sup, '/admin'); await visit(sup, '/admin/customers'); await visit(sup, '/admin/settings'); await visit(sup, '/admin/support'); await visit(sup, '/admin/finance', { mustContain: 'No access' }) })
 
 console.log('\nAdmin MFA guard (status response simulated; the emulator cannot do TOTP)')
 async function mfaSession(label, mode, sessionHasSecondFactor = false) {

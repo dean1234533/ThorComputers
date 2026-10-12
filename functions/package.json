@@ -7,16 +7,17 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test lib/domain.test.js lib/core.test.js",
+    "test": "tsc && node --test lib/domain.test.js lib/core.test.js lib/marketplace.test.js",
     "serve": "npm run build && firebase emulators:start --only functions"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
     "firebase-functions": "^6.0.0",
+    "stripe": "^18.5.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
   }
 }

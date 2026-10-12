@@ -1,7 +1,7 @@
 import { createContext, forwardRef, useCallback, useContext, useEffect, useId, useState, ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { BadgeCheck, CheckCircle2, AlertCircle, Info, Loader2, Star, X, UserRound } from 'lucide-react'
-import { JOB_STATUS_LABEL, JobStatus } from '@/types/domain'
+import { JobStatus, jobStatusLabel } from '@/types/domain'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
 
@@ -76,8 +76,8 @@ export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'ok' 
   const t = { neutral: 'bg-ink/8 text-ink/70', ok: 'bg-ok/12 text-ok', warn: 'bg-warn/15 text-warn', bad: 'bg-bad/12 text-bad', info: 'bg-thor-sky/25 text-thor-blue-700', brand: 'bg-thor-blue text-white' }[tone]
   return <span className={cx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium', t)}>{children}</span>
 }
-const STATUS_TONE: Partial<Record<JobStatus, 'ok' | 'warn' | 'bad' | 'info' | 'neutral'>> = { open: 'info', completed: 'ok', closed: 'neutral', cancelled: 'bad', disputed: 'bad', awaiting_parts: 'warn' }
-export const StatusPill = ({ status }: { status: JobStatus }) => <Badge tone={STATUS_TONE[status] ?? 'info'}>{JOB_STATUS_LABEL[status]}</Badge>
+const STATUS_TONE: Partial<Record<JobStatus, 'ok' | 'warn' | 'bad' | 'info' | 'neutral'>> = { open: 'info', completed: 'ok', closed: 'neutral', cancelled: 'bad', disputed: 'bad', awaiting_parts: 'warn', awaiting_verification: 'warn', awaiting_payment: 'warn' }
+export const StatusPill = ({ status, quoteCount }: { status: JobStatus; quoteCount?: number }) => <Badge tone={STATUS_TONE[status] ?? 'info'}>{jobStatusLabel(status, quoteCount)}</Badge>
 export const VerifiedBadge = ({ label = 'Verified engineer' }: { label?: string }) => <Badge tone="ok"><BadgeCheck className="size-3.5" aria-hidden />{label}</Badge>
 
 export function Stars({ value, count }: { value: number; count?: number }) {

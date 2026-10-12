@@ -34,8 +34,15 @@ export default function NewRequest() {
   useEffect(() => { if (!d.postcode && profile?.postcode) setD(s => ({ ...s, postcode: profile.postcode })) }, [profile, d.postcode])
   useEffect(() => {          // prefill from a WordPress enquiry (the server validates the signed link + email match)
     if (!enquiry) return
-    api.getEnquiry(enquiry).then(({ fields: f }) => setD(s => ({ ...s, manufacturer: s.manufacturer || f.brand || '', model: s.model || f.model || '', serial: s.serial || f.serial_n || '', description: s.description || f.problem || '', postcode: f.postal_code || s.postcode })))
-      .catch(e => toast('bad', errMsg(e)))
+    api.getEnquiry(enquiry).then(({ fields: f }) => {
+      const device = (DEVICE_TYPES.some(t => t.id === f.device_type) ? f.device_type : '') as DeviceType | ''
+      const methods = ((f.service_methods as unknown as string[] | undefined) ?? (f.service_method ? [f.service_method] : [])).filter(m => device && METHODS_FOR_DEVICE[device].includes(m as ServiceMethod)) as ServiceMethod[]
+      const next: Draft = { ...EMPTY, device, manufacturer: f.brand || '', model: f.model || '', serial: f.serial_n || '', description: f.problem || '', postcode: f.postal_code || profile?.postcode || '',
+        urgency: (['flexible', 'soon', 'urgent'].includes(f.urgency) ? f.urgency : 'flexible') as Draft['urgency'], methods, dates: f.preferred_date ? [f.preferred_date] : [] }
+      setD(next)
+      // Everything needed is already known (e.g. a complete Facebook/Instagram lead): go straight to "Check and submit" instead of re-asking.
+      if (next.device && next.manufacturer && next.description.length >= 10 && next.methods.length && POSTCODE.test(next.postcode)) setStep(5)
+    }).catch(e => toast('bad', errMsg(e)))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -119,7 +126,7 @@ export default function NewRequest() {
             {d.dates.map(x => <button key={x} type="button" onClick={() => set('dates', d.dates.filter(y => y !== x))} className="inline-flex items-center gap-1 rounded-full bg-thor-blue/10 px-3 py-1.5 text-sm text-thor-blue">{x}<X className="size-3.5" /></button>)}
             {d.dates.length < 5 && <input type="date" aria-label="Add preferred date" min={new Date().toISOString().slice(0, 10)} onChange={e => { const v = e.target.value; if (v && !d.dates.includes(v)) set('dates', [...d.dates, v].sort()); e.target.value = '' }} className="h-10 rounded-xl border border-ink/15 bg-white px-3" />}</div></div></>}
 
-        {step === 5 && <><h1 className="font-display text-2xl">Check and submit</h1>
+        {step === 5 && <><h1 className="font-display text-2xl">Check and submit</h1>{enquiry && <p className="text-sm text-thor-text">We filled this in from your enquiry. Tap Back to change anything, then submit to send it to approved engineers.</p>}
           <dl className="divide-y divide-ink/8 rounded-2xl bg-white px-4 shadow-sm">{[
             ['Device', `${DEVICE_TYPES.find(t => t.id === d.device)?.label} · ${d.manufacturer} ${d.model}`], ['Problem', [...d.issues, d.description].filter(Boolean).join(' · ')],
             ['Urgency', d.urgency], ['Service', d.methods.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(', ')], ['Postcode', d.postcode.toUpperCase()],

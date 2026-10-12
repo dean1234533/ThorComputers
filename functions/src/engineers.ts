@@ -41,14 +41,15 @@ export const submitEngineerApplication = callable(z.object({}), async (req) => {
 const publicProfile = (uid: string, a: z.infer<typeof Application>, prev?: FirebaseFirestore.DocumentData) => ({
   displayName: a.displayName, businessName: a.businessName, bio: a.bio, yearsExperience: a.yearsExperience,
   specialisations: a.specialisations, areasCovered: a.areasCovered, workingArrangements: a.workingArrangements,
-  typicalPricing: a.typicalPricing, photoURL: a.photoURL, selfReportedCerts: a.certificationsText,   // shown as UNVERIFIED on the public profile serviceRadiusMiles: a.serviceArea.radiusMiles,
+  typicalPricing: a.typicalPricing, photoURL: a.photoURL, selfReportedCerts: a.certificationsText,   // shown as UNVERIFIED on the public profile
+  serviceRadiusMiles: a.serviceArea.radiusMiles,
   // contact details, home postcode and documents are deliberately NOT copied to the public profile
   verifiedQualifications: prev?.verifiedQualifications ?? [], ratingAvg: prev?.ratingAvg ?? 0, reviewCount: prev?.reviewCount ?? 0,
   completedJobs: prev?.completedJobs ?? 0, provider: prev?.provider ?? 'independent', updatedAt: FieldValue.serverTimestamp(), uid,
 })
 
 export const reviewEngineerApplication = callable(z.object({
-  engineerId: z.string(), decision: z.enum(['approve', 'reject', 'request_info', 'suspend', 'reinstate']), note: z.string().trim().max(1000).optional().default(''),
+  engineerId: z.string(), decision: z.enum(['start_review', 'approve', 'reject', 'request_info', 'suspend', 'reinstate']), note: z.string().trim().max(1000).optional().default(''),
   provider: z.enum(['independent', 'thor']).optional(),
 }), async (req, d) => {
   const c = requirePerm(req, 'engineers.review')
@@ -58,11 +59,11 @@ export const reviewEngineerApplication = callable(z.object({
     const snap = await tx.get(appRef)
     if (!snap.exists) throw new HttpsError('not-found', 'Application not found.')
     const a = snap.data()!
-    const allowed: Record<string, string[]> = { approve: ['pending'], reject: ['pending'], request_info: ['pending'], suspend: ['approved'], reinstate: ['suspended'] }
+    const allowed: Record<string, string[]> = { start_review: ['pending'], approve: ['pending', 'under_review'], reject: ['pending', 'under_review'], request_info: ['pending', 'under_review'], suspend: ['approved'], reinstate: ['suspended'] }
     if (!allowed[d.decision].includes(a.status)) throw new HttpsError('failed-precondition', `Cannot ${d.decision} an application that is ${a.status}.`)
     const profileRef = db.doc(`engineerProfiles/${d.engineerId}`)
     const prevProfile = d.decision === 'approve' ? (await tx.get(profileRef)).data() : undefined   // Firestore: every read must precede the first write
-    const next = { approve: 'approved', reject: 'rejected', request_info: 'info_requested', suspend: 'suspended', reinstate: 'approved' }[d.decision]!
+    const next = { start_review: 'under_review', approve: 'approved', reject: 'rejected', request_info: 'info_requested', suspend: 'suspended', reinstate: 'approved' }[d.decision]!
     const upd: Record<string, unknown> = { status: next, reviewedBy: c.uid, reviewedAt: FieldValue.serverTimestamp(), decisionNote: d.note }
     if (d.decision === 'request_info') { upd.infoRequest = d.note; upd.submissionCount = (a.submissionCount ?? 0) + 1 }
     tx.update(appRef, upd)
@@ -77,6 +78,7 @@ export const reviewEngineerApplication = callable(z.object({
   await setClaims(d.engineerId, { engineerApproved: approved, specs: approved ? result.specs : [] })
   await audit(c.uid, `engineer.${d.decision}`, `engineerApplications/${d.engineerId}`, { note: d.note })
   const copy = {
+    start_review: ['Application under review', 'An administrator is now reviewing your application.'],
     approve: ['Application approved', 'You can now browse jobs and submit quotations.'],
     reinstate: ['Account reinstated', 'You can quote for jobs again.'],
     reject: ['Application not approved', 'Open the app to see our feedback.'],
@@ -113,5 +115,31 @@ export const updatePublicProfile = callable(z.object({
   if (app?.status !== 'approved') throw new HttpsError('failed-precondition', 'Only approved profiles can be edited this way.')
   await appRef.update({ profile: { ...app.profile, ...d }, updatedAt: FieldValue.serverTimestamp() })
   await db.doc(`engineerProfiles/${c.uid}`).set({ ...d, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+  return { ok: true }
+})
+
+const SPEC_ENUM = z.enum(SPECS)
+/** Admin control over an approved engineer's marketplace scope. Specialisations here are the APPROVED set (claims + profile); changes are audited. */
+export const adminUpdateEngineer = callable(z.object({
+  engineerId: z.string(), specialisations: z.array(SPEC_ENUM).min(1).optional(), serviceRadiusMiles: z.number().min(1).max(100).optional(),
+  provider: z.enum(['independent', 'thor']).optional(), marketplaceRestricted: z.boolean().optional(), note: z.string().trim().min(5).max(500),
+}), async (req, d) => {
+  const c = requirePerm(req, 'engineers.review')
+  const appRef = db.doc(`engineerApplications/${d.engineerId}`), app = (await appRef.get()).data()
+  if (!app) throw new HttpsError('not-found', 'Engineer not found.')
+  const profUpd: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() }
+  if (d.specialisations) profUpd.specialisations = d.specialisations
+  if (d.serviceRadiusMiles) profUpd.serviceRadiusMiles = d.serviceRadiusMiles
+  if (d.provider) profUpd.provider = d.provider
+  if (d.marketplaceRestricted !== undefined) profUpd.marketplaceRestricted = d.marketplaceRestricted
+  const appUpd: Record<string, unknown> = {}
+  if (d.specialisations) appUpd['profile.specialisations'] = d.specialisations
+  if (d.serviceRadiusMiles) appUpd['profile.serviceArea.radiusMiles'] = d.serviceRadiusMiles
+  const b = db.batch(); b.set(db.doc(`engineerProfiles/${d.engineerId}`), profUpd, { merge: true }); if (Object.keys(appUpd).length) b.update(appRef, appUpd); await b.commit()
+  const restricted = d.marketplaceRestricted ?? (await db.doc(`engineerProfiles/${d.engineerId}`).get()).data()?.marketplaceRestricted ?? false
+  const approved = app.status === 'approved' && !restricted
+  if (d.specialisations || d.marketplaceRestricted !== undefined) await setClaims(d.engineerId, { engineerApproved: approved, specs: approved ? (d.specialisations ?? app.profile?.specialisations ?? []) : [] })
+  const { note, engineerId: _e, ...changes } = d
+  await audit(c.uid, 'engineer.update', `engineerProfiles/${d.engineerId}`, { changes, note })
   return { ok: true }
 })

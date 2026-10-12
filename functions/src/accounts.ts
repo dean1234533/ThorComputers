@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { db, auth, callable, requireAuth, requirePerm, setClaims, audit, FieldValue, HttpsError, notify, notifyAdmins, APP_URL } from './core'
+import { db, auth, callable, requireAuth, requirePerm, setClaims, audit, FieldValue, HttpsError, notify, notifyAdmins, APP_URL, ADMIN_PERMS, ADMIN_DEFAULTS } from './core'
 import { sendEmail, p } from './email'
 import { getStorage } from 'firebase-admin/storage'
 
@@ -50,26 +50,51 @@ export const exportMyData = callable(z.object({}), async (req) => {
 
 const ACTIVE = ['engineer_selected', 'appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts', 'disputed']
 /** Erases personal data; keeps anonymised job/review records needed for the other party and for legal/dispute retention. */
-export const deleteMyAccount = callable(z.object({ confirm: z.literal('DELETE') }), async (req) => {
-  const c = requireAuth(req)
-  const field = c.role === 'engineer' ? 'selectedEngineerId' : 'customerId'
-  const active = await db.collection('repairRequests').where(field, '==', c.uid).where('status', 'in', ACTIVE).limit(1).get()
-  if (!active.empty) throw new HttpsError('failed-precondition', 'You have repairs in progress. Complete or cancel them before deleting your account.')
+/** Shared by self-service deletion and admin-handled deletion requests. Financial records (transactions, commission) are retained for legal/tax purposes; they hold ids, not contact details. */
+export async function eraseAccount(uid: string, role: string, actor: string) {
+  const field = role === 'engineer' ? 'selectedEngineerId' : 'customerId'
+  const active = await db.collection('repairRequests').where(field, '==', uid).where('status', 'in', ACTIVE).limit(1).get()
+  if (!active.empty) throw new HttpsError('failed-precondition', 'There are repairs in progress. Complete or cancel them before deleting the account.')
   const batch = db.batch()
-  if (c.role === 'customer') {
-    const mine = await db.collection('repairRequests').where('customerId', '==', c.uid).get()
-    mine.docs.forEach(j => { batch.delete(db.doc(`repairRequests/${j.id}/private/details`)); if (j.data().status === 'open') batch.update(j.ref, { status: 'cancelled', updatedAt: FieldValue.serverTimestamp() }) })
-  } else {
-    batch.delete(db.doc(`engineerProfiles/${c.uid}`)); batch.delete(db.doc(`engineerApplications/${c.uid}`))
-    const q = await db.collection('engineerQualifications').where('engineerId', '==', c.uid).get(); q.docs.forEach(x => batch.delete(x.ref))
+  if (role === 'customer') {
+    const mine = await db.collection('repairRequests').where('customerId', '==', uid).get()
+    mine.docs.forEach(j => { batch.delete(db.doc(`repairRequests/${j.id}/private/details`)); if (['open', 'awaiting_verification'].includes(j.data().status)) batch.update(j.ref, { status: 'cancelled', updatedAt: FieldValue.serverTimestamp() }) })
+  } else if (role === 'engineer') {
+    batch.delete(db.doc(`engineerProfiles/${uid}`)); batch.delete(db.doc(`engineerApplications/${uid}`))
+    const q = await db.collection('engineerQualifications').where('engineerId', '==', uid).get(); q.docs.forEach(x => batch.delete(x.ref))
   }
-  const tokens = await db.collection('deviceTokens').where('userId', '==', c.uid).get(); tokens.docs.forEach(t => batch.delete(t.ref))
-  batch.set(db.doc(`users/${c.uid}`), { status: 'deleted', fullName: 'Deleted user', email: null, phone: null, postcode: null, photoURL: null, deletedAt: FieldValue.serverTimestamp() })
+  const tokens = await db.collection('deviceTokens').where('userId', '==', uid).get(); tokens.docs.forEach(t => batch.delete(t.ref))
+  batch.set(db.doc(`users/${uid}`), { status: 'deleted', role, fullName: 'Deleted user', email: null, phone: null, postcode: null, photoURL: null, deletedAt: FieldValue.serverTimestamp() })
   await batch.commit()
   const bucket = getStorage().bucket()
-  await Promise.all([`avatars/${c.uid}/`, `qualifications/${c.uid}/`, `requests/${c.uid}/`].map(prefix => bucket.deleteFiles({ prefix }).catch(() => undefined)))
-  await audit(c.uid, 'account.delete', `users/${c.uid}`)
-  await auth.deleteUser(c.uid)
+  await Promise.all([`avatars/${uid}/`, `qualifications/${uid}/`, `requests/${uid}/`].map(prefix => bucket.deleteFiles({ prefix }).catch(() => undefined)))
+  await audit(actor, 'account.delete', `users/${uid}`, actor === uid ? {} : { byAdmin: true })
+  await auth.deleteUser(uid).catch(e => { if (e.code !== 'auth/user-not-found') throw e })
+}
+
+export const deleteMyAccount = callable(z.object({ confirm: z.literal('DELETE') }), async (req) => {
+  const c = requireAuth(req)
+  await eraseAccount(c.uid, c.role, c.uid)
+  return { ok: true }
+})
+
+/** Customers who cannot self-delete (or contact support) are handled here. Admin accounts are never erased this way. */
+export const adminDeleteAccount = callable(z.object({ userId: z.string(), confirm: z.literal('DELETE'), reason: z.string().trim().min(5).max(500) }), async (req, d) => {
+  const c = requirePerm(req, 'customers.manage')
+  const u = (await db.doc(`users/${d.userId}`).get()).data()
+  if (!u) throw new HttpsError('not-found', 'User not found.')
+  if (u.role === 'admin') throw new HttpsError('permission-denied', 'Remove admin access first.')
+  if (c.token.adminLevel === 'support') throw new HttpsError('permission-denied', 'Support staff cannot delete accounts. Escalate to an administrator.')
+  await eraseAccount(d.userId, u.role, c.uid)
+  await audit(c.uid, 'account.admin_delete', `users/${d.userId}`, { reason: d.reason })
+  await db.collection('deletionRequests').where('userId', '==', d.userId).where('status', '==', 'open').get().then(s => Promise.all(s.docs.map(x => x.ref.update({ status: 'completed', handledBy: c.uid, handledAt: FieldValue.serverTimestamp() }))))
+  return { ok: true }
+})
+
+export const requestAccountDeletion = callable(z.object({ reason: z.string().trim().max(500).optional().default('') }), async (req, d) => {
+  const c = requireAuth(req)
+  await db.doc(`deletionRequests/${c.uid}`).set({ userId: c.uid, role: c.role, reason: d.reason, status: 'open', createdAt: FieldValue.serverTimestamp() })
+  await notifyAdmins('customers.manage', { category: 'admin', dedupeKey: `deletion:${c.uid}:${Date.now()}`, title: 'Account deletion request', body: 'A user asked for their account to be deleted.', link: '/admin/customers' })
   return { ok: true }
 })
 
@@ -87,11 +112,11 @@ export const setAccountSuspended = callable(z.object({ userId: z.string(), suspe
 
 export const setAdminRole = callable(z.object({
   userId: z.string(), level: z.enum(['super_admin', 'admin', 'support', 'none']),
-  perms: z.array(z.enum(['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'])).optional(),
+  perms: z.array(z.enum(ADMIN_PERMS)).optional(),
 }), async (req, d) => {
   const c = requirePerm(req, 'admins.manage')
   if (d.userId === c.uid) throw new HttpsError('failed-precondition', 'You cannot change your own admin level.')
-  const DEF = { super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'], admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view'], support: ['customers.manage', 'reports.view'] } as const
+  const DEF = ADMIN_DEFAULTS
   if (d.level === 'none') {
     await setClaims(d.userId, { role: 'customer', adminLevel: null, perms: [] }); await db.doc(`users/${d.userId}`).update({ role: 'customer', adminLevel: null, perms: [] })
   } else {

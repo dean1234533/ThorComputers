@@ -30,6 +30,11 @@ const Appointments = L(() => import('@/pages/shared/Appointments')), Messages = 
 const A = (k: string) => named(() => import('@/pages/admin/AdminPages'), k)
 const AdminOverview = A('AdminOverview'), Approvals = A('Approvals'), AdminCustomers = A('AdminCustomers'), AdminEngineers = A('AdminEngineers'), AdminJobs = A('AdminJobs'), AdminQuotations = A('AdminQuotations'), AdminAppointments = A('AdminAppointments'), AdminReviews = A('AdminReviews'), AdminReports = A('AdminReports')
 const AdminSettings = L(() => import('@/pages/admin/AdminSettings')), AdminSecurity = L(() => import('@/pages/admin/AdminSecurity'))
+const AdminMarketing = L(() => import('@/pages/admin/AdminMarketing')), AdminFinance = L(() => import('@/pages/admin/AdminFinance'))
+const AdminLeads = named(() => import('@/pages/admin/AdminLeads'), 'AdminLeads'), LeadDetail = named(() => import('@/pages/admin/AdminLeads'), 'LeadDetail')
+const AdminDisputes = named(() => import('@/pages/admin/AdminOps'), 'AdminDisputes'), AdminSupport = named(() => import('@/pages/admin/AdminOps'), 'AdminSupport')
+const SupportPage = named(() => import('@/pages/shared/Support'), 'SupportPage'), UserTicket = named(() => import('@/pages/shared/Support'), 'UserTicket'), AdminTicket = named(() => import('@/pages/shared/Support'), 'AdminTicket')
+const Payouts = L(() => import('@/pages/engineer/Payouts'))
 
 export default function App() {
   return (
@@ -37,11 +42,13 @@ export default function App() {
       <Suspense fallback={<Splash />}><Routes>
         <Route path="/login" element={<Login />} /><Route path="/register" element={<Register />} /><Route path="/forgot" element={<Forgot />} />
         <Route path="/install" element={<Install />} /><Route path="/privacy" element={<Privacy />} /><Route path="/continue" element={<Continue />} />
-        <Route path="/setup" element={<Setup />} /><Route path="/verify" element={<Verify />} />
+        <Route path="/setup" element={<Setup />} />
+        {/* Stable entry points used by the WordPress plugin buttons */}
+        <Route path="/request" element={<Navigate to="/customer/new-request" replace />} /><Route path="/track" element={<Navigate to="/customer/repairs" replace />} /><Route path="/find-engineer" element={<Navigate to="/customer/new-request" replace />} /><Route path="/engineer-signup" element={<Navigate to="/register?role=engineer" replace />} /><Route path="/verify" element={<Verify />} />
         <Route path="/" element={<RedirectHome />} />
 
         <Route element={<RequireAuth />}><Route element={<AppShell />}>
-          <Route path="/messages/:cid?" element={<Messages />} /><Route path="/notifications" element={<Notifications />} /><Route path="/settings" element={<Settings />} /><Route path="/profile" element={<Profile />} /><Route path="/engineers/:id" element={<EngineerProfile />} />
+          <Route path="/messages/:cid?" element={<Messages />} /><Route path="/notifications" element={<Notifications />} /><Route path="/settings" element={<Settings />} /><Route path="/profile" element={<Profile />} /><Route path="/engineers/:id" element={<EngineerProfile />} /><Route path="/support" element={<SupportPage />} /><Route path="/support/:id" element={<UserTicket />} />
         </Route></Route>
 
         <Route element={<RequireAuth role="customer" />}><Route element={<AppShell />}>
@@ -51,12 +58,12 @@ export default function App() {
 
         <Route element={<RequireAuth role="engineer" />}><Route element={<AppShell />}>
           <Route path="/engineer" element={<EngineerDashboard />} /><Route path="/engineer/jobs" element={<AvailableJobs />} /><Route path="/engineer/jobs/:id" element={<JobDetail />} /><Route path="/engineer/quotations" element={<MyQuotations />} />
-          <Route path="/engineer/my-jobs" element={<MyJobs />} /><Route path="/engineer/my-jobs/:id" element={<MyJobDetail />} /><Route path="/engineer/appointments" element={<EngineerAppointments />} /><Route path="/engineer/reviews" element={<EngineerReviews />} /><Route path="/engineer/profile" element={<Onboarding />} />
+          <Route path="/engineer/my-jobs" element={<MyJobs />} /><Route path="/engineer/my-jobs/:id" element={<MyJobDetail />} /><Route path="/engineer/appointments" element={<EngineerAppointments />} /><Route path="/engineer/reviews" element={<EngineerReviews />} /><Route path="/engineer/profile" element={<Onboarding />} /><Route path="/engineer/payouts" element={<Payouts />} />
         </Route></Route>
 
         <Route element={<RequireAuth role="admin" />}><Route element={<AdminMfaGuard />}><Route element={<AppShell />}>
           <Route path="/admin" element={<AdminOverview />} /><Route path="/admin/approvals" element={<Approvals />} /><Route path="/admin/customers" element={<AdminCustomers />} /><Route path="/admin/engineers" element={<AdminEngineers />} />
-          <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/security" element={<AdminSecurity />} />
+          <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/marketing" element={<AdminMarketing />} /><Route path="/admin/leads" element={<AdminLeads />} /><Route path="/admin/leads/:id" element={<LeadDetail />} /><Route path="/admin/finance" element={<AdminFinance />} /><Route path="/admin/disputes" element={<AdminDisputes />} /><Route path="/admin/support" element={<AdminSupport />} /><Route path="/admin/support/:id" element={<AdminTicket />} /><Route path="/admin/security" element={<AdminSecurity />} />
         </Route></Route></Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>

@@ -65,18 +65,52 @@ export function requireApprovedEngineer(req: CallableRequest): Caller {
   if (c.token.engineerApproved !== true) throw new HttpsError('permission-denied', 'Your engineer account is not approved yet.')
   return c
 }
-export function requirePerm(req: CallableRequest, perm: string): Caller {
+export function requirePerm(req: CallableRequest, perm: AdminPerm): Caller {
   const c = requireRole(req, 'admin')
   if (!(c.token.perms as string[] | undefined)?.includes(perm)) throw new HttpsError('permission-denied', `Missing permission: ${perm}`)
   return c
 }
 
+/** Commission, payment and integration settings: super administrators only (permission AND level, so a custom perm set cannot grant it). */
+export function requireSuperAdmin(req: CallableRequest, perm: AdminPerm = 'payments.configure'): Caller {
+  const c = requirePerm(req, perm)
+  if (c.token.adminLevel !== 'super_admin') throw new HttpsError('permission-denied', 'Only a super administrator can change this.')
+  return c
+}
+export const hasPerm = (c: Caller, p: AdminPerm) => c.role === 'admin' && ((c.token.perms as string[] | undefined) ?? []).includes(p)
+
+// ---------- admin permission model ----------
+export const ADMIN_PERMS = ['engineers.review', 'customers.manage', 'jobs.manage', 'jobs.view', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view',
+  'finance.view', 'payments.manage', 'payments.configure', 'marketing.view', 'marketing.manage', 'leads.manage', 'disputes.manage', 'support.handle', 'chatbot.manage', 'audit.view'] as const
+export type AdminPerm = (typeof ADMIN_PERMS)[number]
+/** Support staff never get finance, payment, integration, security or settings permissions. */
+export const ADMIN_DEFAULTS: Record<'super_admin' | 'admin' | 'support', AdminPerm[]> = {
+  super_admin: [...ADMIN_PERMS],
+  admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'jobs.view', 'reviews.moderate', 'reports.view', 'leads.manage', 'marketing.view', 'disputes.manage', 'support.handle'],
+  support: ['customers.manage', 'jobs.view', 'reports.view', 'support.handle'],
+}
+
+/** Local development / tests: outbound services are never called for real. */
+export const isMock = () => process.env.FUNCTIONS_EMULATOR === 'true' || process.env.MOCK_EXTERNAL === 'true'
+
+/** THOR-2026-000125: sequential per year, allocated in a transaction (one counter document per year). */
+export async function nextJobRef(): Promise<string> {
+  const { formatJobRef } = await import('./domain')
+  const year = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric' }).format(new Date()))
+  const r = db.doc(`counters/jobRef-${year}`)
+  const n = await db.runTransaction(async tx => { const cur = ((await tx.get(r)).data()?.next as number | undefined) ?? 1; tx.set(r, { next: cur + 1 }, { merge: true }); return cur })
+  return formatJobRef(year, n)
+}
+
+/** Firestore rejects `undefined`; optional fields are dropped (recursing only into plain objects/arrays so Timestamps survive). */
+const dropUndefined = (v: unknown): unknown => Array.isArray(v) ? v.map(dropUndefined)
+  : v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => [k, dropUndefined(x)])) : v
 export async function audit(actorId: string, action: string, target: string, detail: Record<string, unknown> = {}) {
-  await db.collection('auditLogs').add({ actorId, action, target, detail, createdAt: FieldValue.serverTimestamp() })
+  await db.collection('auditLogs').add({ actorId, action, target, detail: dropUndefined(detail), createdAt: FieldValue.serverTimestamp() })
 }
 
 // ---------- notifications ----------
-export type NotifCategory = 'quotes' | 'messages' | 'bookings' | 'status' | 'reviews' | 'admin' | 'account'
+export type NotifCategory = 'quotes' | 'jobs' | 'messages' | 'bookings' | 'status' | 'reviews' | 'payments' | 'support' | 'admin' | 'account'
 export interface NotifyInput {
   userId: string; dedupeKey: string; category: NotifCategory
   title: string; body: string           // Generic copy: shown on lock screens, so never include PII, addresses or message text.
@@ -122,7 +156,7 @@ async function pushTo(userId: string, n: NotifyInput) {
   await Promise.all(dead.map(r => r!.delete()))
 }
 
-export const notifyAdmins = async (perm: string, n: Omit<NotifyInput, 'userId'>) => {
+export const notifyAdmins = async (perm: AdminPerm, n: Omit<NotifyInput, 'userId'>) => {
   const admins = await db.collection('users').where('role', '==', 'admin').where('status', '==', 'active').get()
   await Promise.all(admins.docs.filter(d => (d.data().perms ?? []).includes(perm)).map(d => notify({ ...n, userId: d.id, dedupeKey: `${n.dedupeKey}:${d.id}` })))
 }

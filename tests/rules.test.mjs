@@ -217,3 +217,62 @@ test('reports: reporter can create and read own; others cannot read; nobody upda
   await assertFails(getDoc(doc(customerB(), 'reports/r1')))
   await assertFails(updateDoc(doc(customerA(), 'reports/r1'), { status: 'dismissed' }))
 })
+
+// ---------- marketplace upgrade: payments, Meta, support, disputes ----------
+const SUPPORT = ['customers.manage', 'jobs.view', 'reports.view', 'support.handle']
+const ADMIN = ['engineers.review', 'customers.manage', 'jobs.manage', 'jobs.view', 'reviews.moderate', 'reports.view', 'leads.manage', 'marketing.view', 'disputes.manage', 'support.handle']
+const seedMore = () => env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore()
+  await setDoc(doc(db, 'payments/p1'), { jobId: 'job2', customerId: 'custA', engineerId: 'eng1', amountPence: 10000, status: 'paid' })
+  await setDoc(doc(db, 'transactions/pi1'), { jobId: 'job2', customerId: 'custA', engineerId: 'eng1', grossPence: 10000, commissionPence: 1500 })
+  await setDoc(doc(db, 'commissionRecords/pi1'), { amountPence: 1500 })
+  await setDoc(doc(db, 'stripeConnectedAccounts/eng1'), { accountId: 'acct_1', transfersActive: true })
+  await setDoc(doc(db, 'stripeEvents/evt1'), { type: 'x' })
+  await setDoc(doc(db, 'metaSecrets/user'), { tokenEnc: 'v1.secret' })
+  await setDoc(doc(db, 'metaLeads/l1'), { status: 'imported', mapped: { email: 'x@y.z' } })
+  await setDoc(doc(db, 'metaConnections/default'), { status: 'connected' })
+  await setDoc(doc(db, 'platformSettings/marketing'), { leadPublishMode: 'confirm' })
+  await setDoc(doc(db, 'platformSettings/chatbot'), { enabled: true })
+  await setDoc(doc(db, 'supportTickets/t1'), { userId: 'custA', status: 'open' })
+  await setDoc(doc(db, 'supportTickets/t1/messages/m1'), { authorId: 'custA', text: 'help' })
+  await setDoc(doc(db, 'disputes/job2'), { customerId: 'custA', engineerId: 'eng1', status: 'open' })
+})
+
+test('payments and transactions: only the parties and finance admins; nobody writes from a browser', async () => {
+  await seedMore()
+  await assertSucceeds(getDoc(doc(customerA(), 'payments/p1'))); await assertSucceeds(getDoc(doc(eng(), 'transactions/pi1')))
+  await assertFails(getDoc(doc(customerB(), 'payments/p1'))); await assertFails(getDoc(doc(customerB(), 'transactions/pi1')))
+  await assertFails(setDoc(doc(customerA(), 'payments/p2'), { jobId: 'job2', customerId: 'custA', status: 'paid', amountPence: 1 }))
+  await assertFails(updateDoc(doc(customerA(), 'payments/p1'), { status: 'refunded' }))
+  await assertFails(setDoc(doc(customerA(), 'transactions/pi2'), { customerId: 'custA', commissionPence: 0 }))
+  await assertFails(getDoc(doc(admin(SUPPORT), 'transactions/pi1')))                 // support never sees finance
+  await assertFails(getDoc(doc(admin(SUPPORT), 'commissionRecords/pi1')))
+  await assertFails(getDoc(doc(admin(ADMIN), 'commissionRecords/pi1')))
+  await assertSucceeds(getDoc(doc(admin(['finance.view']), 'commissionRecords/pi1')))
+  await assertFails(getDoc(doc(admin(['finance.view', 'admins.manage']), 'stripeEvents/evt1')))
+  await assertSucceeds(getDoc(doc(eng(), 'stripeConnectedAccounts/eng1'))); await assertFails(getDoc(doc(customerA(), 'stripeConnectedAccounts/eng1')))
+})
+test('Meta tokens are unreadable by everyone; leads only for lead managers', async () => {
+  await seedMore()
+  await assertFails(getDoc(doc(admin([...ADMIN, 'marketing.manage', 'settings.edit', 'admins.manage']), 'metaSecrets/user')))
+  await assertSucceeds(getDoc(doc(admin(ADMIN), 'metaLeads/l1'))); await assertFails(getDoc(doc(admin(SUPPORT), 'metaLeads/l1'))); await assertFails(getDoc(doc(customerA(), 'metaLeads/l1')))
+  await assertSucceeds(getDoc(doc(admin(['marketing.view']), 'metaConnections/default'))); await assertFails(getDoc(doc(admin(SUPPORT), 'metaConnections/default')))
+  await assertSucceeds(getDoc(doc(admin(['marketing.view']), 'platformSettings/marketing'))); await assertFails(getDoc(doc(customerA(), 'platformSettings/marketing')))
+  await assertFails(getDoc(doc(admin(ADMIN), 'platformSettings/chatbot'))); await assertSucceeds(getDoc(doc(admin(['chatbot.manage']), 'platformSettings/chatbot')))
+  await assertFails(setDoc(doc(admin([...ADMIN, 'marketing.manage']), 'metaLeads/l2'), { status: 'converted_to_job' }))
+})
+test('support tickets and disputes: owner/parties and the right staff only', async () => {
+  await seedMore()
+  await assertSucceeds(getDoc(doc(customerA(), 'supportTickets/t1'))); await assertSucceeds(getDoc(doc(customerA(), 'supportTickets/t1/messages/m1')))
+  await assertFails(getDoc(doc(customerB(), 'supportTickets/t1'))); await assertFails(getDoc(doc(customerB(), 'supportTickets/t1/messages/m1')))
+  await assertSucceeds(getDoc(doc(admin(SUPPORT), 'supportTickets/t1/messages/m1')))
+  await assertFails(setDoc(doc(customerA(), 'supportTickets/t2'), { userId: 'custA', status: 'open' }))
+  await assertSucceeds(getDoc(doc(eng(), 'disputes/job2'))); await assertFails(getDoc(doc(customerB(), 'disputes/job2'))); await assertFails(getDoc(doc(admin(SUPPORT), 'disputes/job2')))
+  await assertSucceeds(getDoc(doc(admin(ADMIN), 'disputes/job2')))
+})
+test('jobs awaiting verification are hidden from engineers; support can view jobs but not addresses', async () => {
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'repairRequests/job3'), { customerId: 'custA', status: 'awaiting_verification', selectedEngineerId: null, requiredSpecs: ['laptop'] }))
+  await assertFails(getDoc(doc(eng(), 'repairRequests/job3')))
+  await assertSucceeds(getDoc(doc(admin(SUPPORT), 'repairRequests/job1')))
+  await assertFails(getDoc(doc(admin(SUPPORT), 'repairRequests/job1/private/details')))
+})

@@ -16,7 +16,7 @@ function JobRow({ j }: { j: Job & { id: string } }) {
     <li><Link to={`/customer/repairs/${j.id}`} className="surface group flex items-center gap-3 p-4 transition hover:border-thor-blue/25 hover:shadow-md sm:gap-4 sm:p-5">
       <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-paper text-thor-blue"><Wrench className="size-6" /></span>
       <div className="min-w-0 flex-1"><p className="truncate font-medium">{j.device.manufacturer} {j.device.model}</p><p className="truncate text-sm text-thor-text">{j.reference} · {j.description}</p></div>
-      <div className="flex flex-col items-end gap-1"><StatusPill status={j.status} />{j.status === 'open' && j.quoteCount > 0 && <span className="text-xs font-bold text-thor-sky-600">{j.quoteCount} quote{j.quoteCount > 1 ? 's' : ''}</span>}</div>
+      <div className="flex flex-col items-end gap-1"><StatusPill status={j.status} quoteCount={j.quoteCount} />{j.status === 'open' && j.quoteCount > 0 && <span className="text-xs font-bold text-thor-sky-600">{j.quoteCount} quote{j.quoteCount > 1 ? 's' : ''}</span>}</div>
       <ChevronRight className="size-5 text-thor-text transition group-hover:translate-x-0.5" /></Link></li>)
 }
 

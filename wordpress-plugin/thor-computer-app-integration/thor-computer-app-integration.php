@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Thor Computer App Integration
- * Description: Promotes the Thor Computer app (app.thorcomputer.com), adds install buttons/shortcodes, and securely forwards Contact Form 7 repair enquiries to the Thor Computer platform.
- * Version: 1.0.0
+ * Description: Promotes the Thor Computer app (app.thorcomputer.com), adds install, repair-request, tracking, login and engineer-registration buttons, a native repair form, and securely forwards repair enquiries to the Thor Computer platform.
+ * Version: 1.1.0
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Thor Computer Ltd
@@ -11,7 +11,7 @@
  */
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-define( 'THOR_APP_VERSION', '1.0.0' );
+define( 'THOR_APP_VERSION', '1.1.0' );
 define( 'THOR_APP_DIR', plugin_dir_path( __FILE__ ) );
 define( 'THOR_APP_URL', plugin_dir_url( __FILE__ ) );
 

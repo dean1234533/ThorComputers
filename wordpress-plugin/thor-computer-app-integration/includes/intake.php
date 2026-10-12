@@ -36,17 +36,25 @@ function thor_app_forward_enquiry( $contact_form ) {
 	if ( $n >= 3 ) { thor_app_log( 'rate_limited' ); return; }
 	set_transient( $key, $n + 1, HOUR_IN_SECONDS );
 
+	// Stable per submission: CF7's posted-data hash + site, so a retry is a duplicate not a new request.
+	$submission_id = hash( 'sha256', home_url() . '|' . $contact_form->id() . '|' . $sub->get_meta( 'timestamp' ) . '|' . $ip . '|' . strtolower( $email ) );
+	thor_app_log( thor_app_send_enquiry( thor_app_fields_from( $d, $email ), $submission_id ) );
+}
+
+/** Sanitised, length-capped fields in the shape wpIntake expects. Shared by Contact Form 7 and the native [thor_repair_form]. */
+function thor_app_fields_from( $d, $email ) {
 	$f = function ( $k, $max ) use ( $d ) { return isset( $d[ $k ] ) ? mb_substr( sanitize_text_field( is_array( $d[ $k ] ) ? implode( ' ', $d[ $k ] ) : $d[ $k ] ), 0, $max ) : ''; };
-	$payload = array(
-		// Stable per submission: CF7's posted-data hash + site, so a retry is a duplicate not a new request.
-		'submissionId' => hash( 'sha256', home_url() . '|' . $contact_form->id() . '|' . $sub->get_meta( 'timestamp' ) . '|' . $ip . '|' . strtolower( $email ) ),
-		'consent'      => true,
-		'fields'       => array(
-			'first_name' => $f( 'first_name', 80 ), 'email' => $email, 'phone' => $f( 'phone', 30 ), 'postal_code' => $f( 'postal_code', 10 ),
-			'brand' => $f( 'brand', 60 ), 'model' => $f( 'model', 80 ), 'serial_n' => $f( 'serial_n', 60 ), 'problem' => $f( 'problem', 2000 ),
-		),
+	$fields = array(
+		'first_name' => $f( 'first_name', 80 ), 'email' => $email, 'phone' => $f( 'phone', 30 ), 'postal_code' => $f( 'postal_code', 10 ),
+		'brand' => $f( 'brand', 60 ), 'model' => $f( 'model', 80 ), 'serial_n' => $f( 'serial_n', 60 ), 'problem' => $f( 'problem', 2000 ),
 	);
-	$body = wp_json_encode( $payload );
+	foreach ( array( 'device_type' => 20, 'service_method' => 20, 'urgency' => 10 ) as $k => $max ) { if ( '' !== $f( $k, $max ) ) { $fields[ $k ] = $f( $k, $max ); } }
+	return $fields;
+}
+
+/** Signed server-to-server POST to the platform. Returns a short result code for the status screen; never throws. */
+function thor_app_send_enquiry( $fields, $submission_id ) {
+	$body = wp_json_encode( array( 'submissionId' => $submission_id, 'consent' => true, 'fields' => $fields ) );
 	$ts   = time();
 	$sig  = hash_hmac( 'sha256', $ts . '.' . $body, thor_app_secret() );
 
@@ -55,8 +63,32 @@ function thor_app_forward_enquiry( $contact_form ) {
 		'headers' => array( 'Content-Type' => 'application/json', 'X-Thor-Timestamp' => (string) $ts, 'X-Thor-Signature' => $sig ),
 		'body'    => $body,
 	) );
-	if ( is_wp_error( $res ) ) { thor_app_log( 'error: ' . $res->get_error_code() ); return; } // graceful: visitor's normal CF7 email already went out
-	thor_app_log( 'http_' . wp_remote_retrieve_response_code( $res ) );
+	if ( is_wp_error( $res ) ) { return 'error: ' . $res->get_error_code(); } // graceful: the visitor's normal email already went out
+	return 'http_' . wp_remote_retrieve_response_code( $res );
+}
+
+/** Native repair request form ([thor_repair_form]): same consent, rate limit, signing and central intake as Contact Form 7. */
+add_action( 'admin_post_nopriv_thor_repair_request', 'thor_app_handle_form' );
+add_action( 'admin_post_thor_repair_request', 'thor_app_handle_form' );
+function thor_app_handle_form() {
+	$back = wp_get_referer() ? wp_get_referer() : home_url( '/' );
+	$go = function ( $r ) use ( $back ) { wp_safe_redirect( add_query_arg( 'thor_request', $r, $back ) . '#thor-repair-form' ); exit; };
+	if ( ! isset( $_POST['thor_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['thor_nonce'] ) ), 'thor_repair_request' ) ) { $go( 'expired' ); }
+	if ( ! empty( $_POST['thor_website'] ) ) { $go( 'sent' ); }                                   // honeypot: pretend success to bots
+	if ( '' === thor_app_secret() || '' === thor_app_endpoint() ) { thor_app_log( 'not_configured' ); $go( 'error' ); }
+	if ( empty( $_POST['thor_consent'] ) ) { $go( 'consent' ); }
+	$d = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- sanitised field by field in thor_app_fields_from()
+	$email = isset( $d['email'] ) ? sanitize_email( $d['email'] ) : '';
+	if ( ! is_email( $email ) || mb_strlen( trim( (string) ( $d['problem'] ?? '' ) ) ) < 5 ) { $go( 'invalid' ); }
+	$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
+	$key = 'thor_rl_' . md5( $ip . '|' . strtolower( $email ) );
+	$n   = (int) get_transient( $key );
+	if ( $n >= 3 ) { thor_app_log( 'rate_limited' ); $go( 'busy' ); }
+	set_transient( $key, $n + 1, HOUR_IN_SECONDS );
+	$submission_id = hash( 'sha256', home_url() . '|form|' . sanitize_text_field( $d['thor_nonce'] ) . '|' . $ip . '|' . strtolower( $email ) );
+	$result = thor_app_send_enquiry( thor_app_fields_from( $d, $email ), $submission_id );
+	thor_app_log( $result );
+	$go( 'http_200' === $result ? 'sent' : 'error' );
 }
 
 function thor_app_log( $result ) {

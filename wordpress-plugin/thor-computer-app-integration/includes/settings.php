@@ -16,6 +16,12 @@ function thor_app_opts() {
 		'cf7_form_id'    => '2682',    // existing quote form (found on /get-quote-computer-repair-within-london-and-kent/)
 		'intake_on'      => 0,
 		'consent_text'   => 'I agree to Thor Computer sharing my enquiry with approved engineers on the Thor Computer app so I can receive quotes.',
+		'quotes_text'    => 'Get Repair Quotes',
+		'request_text'   => 'Request a Repair',
+		'find_text'      => 'Find an Engineer',
+		'track_text'     => 'Track My Repair',
+		'login_text'     => 'Customer Login',
+		'engineer_text'  => 'Join as an Engineer',
 	) );
 }
 
@@ -40,7 +46,7 @@ function thor_app_sanitize( $in ) {
 	$out = array();
 	$url = esc_url_raw( isset( $in['app_url'] ) ? trim( $in['app_url'] ) : $o['app_url'] );
 	$out['app_url']       = ( 0 === strpos( $url, 'https://' ) ) ? untrailingslashit( $url ) : $o['app_url']; // HTTPS only
-	foreach ( array( 'button_text', 'floating_text', 'banner_title', 'consent_text' ) as $k ) { $out[ $k ] = sanitize_text_field( isset( $in[ $k ] ) ? $in[ $k ] : $o[ $k ] ); }
+	foreach ( array( 'button_text', 'floating_text', 'banner_title', 'consent_text', 'quotes_text', 'request_text', 'find_text', 'track_text', 'login_text', 'engineer_text' ) as $k ) { $out[ $k ] = sanitize_text_field( isset( $in[ $k ] ) ? $in[ $k ] : $o[ $k ] ); }
 	$out['banner_text']   = sanitize_textarea_field( isset( $in['banner_text'] ) ? $in['banner_text'] : $o['banner_text'] );
 	$out['floating_pos']  = ( isset( $in['floating_pos'] ) && 'left' === $in['floating_pos'] ) ? 'left' : 'right';
 	$out['floating_on']   = empty( $in['floating_on'] ) ? 0 : 1;
@@ -78,6 +84,8 @@ function thor_app_render_settings() {
 					<select name="thor_app_options[floating_pos]"><option value="right" <?php selected( $o['floating_pos'], 'right' ); ?>>Bottom right</option><option value="left" <?php selected( $o['floating_pos'], 'left' ); ?>>Bottom left</option></select></td></tr>
 				<tr><th>Promotional banner</th><td><label><input type="checkbox" name="thor_app_options[banner_on]" value="1" <?php checked( $o['banner_on'] ); ?>> Enable the <code>[thor_app_banner]</code> section and show it above the footer</label><br>
 					<input class="regular-text" name="thor_app_options[banner_title]" value="<?php echo esc_attr( $o['banner_title'] ); ?>"><br><textarea class="large-text" rows="2" name="thor_app_options[banner_text]"><?php echo esc_textarea( $o['banner_text'] ); ?></textarea></td></tr>
+				<tr><th>Button labels</th><td><?php foreach ( array( 'quotes_text' => 'Get Repair Quotes', 'request_text' => 'Request a Repair', 'find_text' => 'Find an Engineer', 'track_text' => 'Track My Repair', 'login_text' => 'Customer login', 'engineer_text' => 'Engineer registration' ) as $k => $label ) : ?>
+					<label style="display:block;margin-bottom:4px"><?php echo esc_html( $label ); ?>: <input class="regular-text" name="thor_app_options[<?php echo esc_attr( $k ); ?>]" value="<?php echo esc_attr( $o[ $k ] ); ?>"></label><?php endforeach; ?></td></tr>
 				<tr><th><label for="exclude_pages">Exclude pages</label></th><td><input id="exclude_pages" class="regular-text" name="thor_app_options[exclude_pages]" value="<?php echo esc_attr( $o['exclude_pages'] ); ?>"><p class="description">Comma-separated page IDs or slugs where the floating button and banner are hidden.</p></td></tr>
 				<tr><th>Repair enquiry integration</th><td><label><input type="checkbox" name="thor_app_options[intake_on]" value="1" <?php checked( $o['intake_on'] ); ?>> Forward Contact Form 7 quote submissions to the Thor Computer app</label><br>
 					Form ID: <input size="8" name="thor_app_options[cf7_form_id]" value="<?php echo esc_attr( $o['cf7_form_id'] ); ?>"><br>
@@ -87,6 +95,7 @@ function thor_app_render_settings() {
 		</form>
 		<h2>Shortcodes</h2>
 		<p><code>[thor_app_download text="Get the Thor Computer App" style="solid|outline" align="left|center|right"]</code> &nbsp; <code>[thor_app_banner]</code></p>
+		<p><code>[thor_app_button action="quotes|request|find|track|login|engineer|install" text="" style="solid|outline|cta" align=""]</code> &nbsp; <code>[thor_repair_form]</code> (native repair request form, uses the same secure intake and consent rules)</p>
 	</div>
 	<?php
 }

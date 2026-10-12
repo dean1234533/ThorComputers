@@ -1,7 +1,7 @@
-import { KeyRound, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
-import type { Role } from '@/types/domain'
+import { KeyRound, Megaphone, Inbox, Wallet, Gavel, LifeBuoy, PoundSterling, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
+import type { AdminPermission, Role } from '@/types/domain'
 
-export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications' }
+export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications'; perm?: AdminPermission | AdminPermission[] }
 
 export const NAV: Record<Role, NavItem[]> = {
   customer: [
@@ -11,6 +11,7 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/messages', label: 'Messages', icon: MessageSquare, primary: true, badge: 'messages' },
     { to: '/customer/quotations', label: 'Quotations', icon: FileText },
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: 'notifications' },
+    { to: '/support', label: 'Support', icon: LifeBuoy },
     { to: '/profile', label: 'Profile', icon: User },
     { to: '/settings', label: 'Settings', icon: Settings },
   ],
@@ -23,21 +24,28 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/engineer/appointments', label: 'Appointments', icon: CalendarDays },
     { to: '/engineer/reviews', label: 'Reviews', icon: Star },
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: 'notifications' },
+    { to: '/engineer/payouts', label: 'Payouts', icon: Wallet },
     { to: '/engineer/profile', label: 'Profile', icon: HardHat },
+    { to: '/support', label: 'Support', icon: LifeBuoy },
     { to: '/settings', label: 'Settings', icon: Settings },
   ],
   admin: [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, primary: true },
-    { to: '/admin/approvals', label: 'Approvals', icon: ShieldCheck, primary: true },
-    { to: '/admin/jobs', label: 'Repair Requests', mobileLabel: 'Requests', icon: ClipboardList, primary: true },
-    { to: '/admin/reports', label: 'Reports', icon: Flag, primary: true },
-    { to: '/admin/customers', label: 'Customers', icon: Users },
-    { to: '/admin/engineers', label: 'Engineers', icon: HardHat },
-    { to: '/admin/quotations', label: 'Quotations', icon: FileText },
-    { to: '/admin/appointments', label: 'Appointments', icon: CalendarDays },
-    { to: '/admin/reviews', label: 'Reviews', icon: Star },
+    { to: '/admin/jobs', label: 'Repair Requests', mobileLabel: 'Requests', icon: ClipboardList, primary: true, perm: ['jobs.view', 'jobs.manage'] },
+    { to: '/admin/leads', label: 'Incoming Leads', mobileLabel: 'Leads', icon: Inbox, primary: true, perm: 'leads.manage' },
+    { to: '/admin/support', label: 'Support', icon: LifeBuoy, primary: true, perm: 'support.handle' },
+    { to: '/admin/approvals', label: 'Approvals', icon: ShieldCheck, perm: 'engineers.review' },
+    { to: '/admin/marketing', label: 'Marketing & Lead Generation', mobileLabel: 'Marketing', icon: Megaphone, perm: 'marketing.view' },
+    { to: '/admin/finance', label: 'Finance', icon: PoundSterling, perm: 'finance.view' },
+    { to: '/admin/disputes', label: 'Disputes', icon: Gavel, perm: 'disputes.manage' },
+    { to: '/admin/reports', label: 'Reports', icon: Flag, perm: 'reviews.moderate' },
+    { to: '/admin/customers', label: 'Customers', icon: Users, perm: 'customers.manage' },
+    { to: '/admin/engineers', label: 'Engineers', icon: HardHat, perm: 'customers.manage' },
+    { to: '/admin/quotations', label: 'Quotations', icon: FileText, perm: ['jobs.view', 'jobs.manage'] },
+    { to: '/admin/appointments', label: 'Appointments', icon: CalendarDays, perm: ['jobs.view', 'jobs.manage'] },
+    { to: '/admin/reviews', label: 'Reviews', icon: Star, perm: 'reviews.moderate' },
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: 'notifications' },
-    { to: '/admin/settings', label: 'Platform Settings', icon: SlidersHorizontal },
+    { to: '/admin/settings', label: 'Platform Settings', icon: SlidersHorizontal, perm: 'settings.edit' },
     { to: '/admin/security', label: 'Security', icon: KeyRound },
   ],
 }

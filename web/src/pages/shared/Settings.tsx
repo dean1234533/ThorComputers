@@ -10,7 +10,7 @@ import { useInstall } from '@/lib/pwa'
 import { Button, PageHeader, Sheet, Input, useToast, Section } from '@/components/ui'
 import InstallSteps from '@/components/InstallSteps'
 
-const CATS: [string, string][] = [['quotes', 'Quotations'], ['messages', 'Messages'], ['bookings', 'Appointments'], ['status', 'Repair status'], ['reviews', 'Reviews']]
+const CATS: [string, string][] = [['quotes', 'Quotations and new jobs'], ['messages', 'Messages'], ['bookings', 'Appointments'], ['status', 'Repair status'], ['payments', 'Payments'], ['reviews', 'Reviews'], ['support', 'Support replies'], ['account', 'Account and verification']]
 const Toggle = ({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) => (
   <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? 'bg-thor-blue' : 'bg-ink/20'}`}><span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} /></button>)
 
@@ -26,6 +26,7 @@ export default function Settings() {
   }
   const exportData = async () => { try { const d = await api.exportMyData({}); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); a.download = 'thor-computer-my-data.json'; a.click(); toast('ok', 'Your data has been downloaded.') } catch (e) { toast('bad', errMsg(e)) } }
   const remove = async () => { try { await api.deleteMyAccount({ confirm: 'DELETE' }); await signOut() } catch (e) { toast('bad', errMsg(e)) } }
+  const askDelete = async () => { try { await api.requestAccountDeletion({}); toast('ok', 'Request sent. Our team will contact you.'); setDel(false) } catch (e) { toast('bad', errMsg(e)) } }
 
   return (
     <div className="max-w-2xl"><PageHeader title="Settings" />
@@ -43,7 +44,7 @@ export default function Settings() {
         <li><button onClick={exportData} className="flex w-full items-center gap-3 p-4 text-left"><FileDown className="size-5 text-thor-blue" /><span className="flex-1"><b className="block font-medium">Download my data</b><span className="text-sm text-thor-text">A copy of everything we hold about you.</span></span></button></li>
         <li><Link to="/privacy" className="flex items-center gap-3 p-4"><span className="flex-1 font-medium">Privacy policy</span></Link></li>
         <li><button onClick={() => setDel(true)} className="flex w-full items-center gap-3 p-4 text-left text-bad"><Trash2 className="size-5" /><span className="flex-1"><b className="block font-medium">Delete my account</b><span className="text-sm opacity-80">Permanently removes your personal data.</span></span></button></li></ul></Section>
-      <Sheet open={del} onClose={() => setDel(false)} title="Delete your account?"><p className="mb-4 text-sm text-thor-text">This erases your profile, contact details, photos and documents. Completed jobs are kept anonymously so the other party’s records remain accurate. It can’t be undone. Type <b>DELETE</b> to confirm.</p><Input label="Confirmation" value={confirmTxt} onChange={e => setConfirmTxt(e.target.value)} /><Button variant="danger" className="mt-4 w-full" disabled={confirmTxt !== 'DELETE'} onClick={remove}>Delete permanently</Button></Sheet>
+      <Sheet open={del} onClose={() => setDel(false)} title="Delete your account?"><p className="mb-4 text-sm text-thor-text">This erases your profile, contact details, photos and documents. Completed jobs are kept anonymously so the other party’s records remain accurate. It can’t be undone. Type <b>DELETE</b> to confirm.</p><Input label="Confirmation" value={confirmTxt} onChange={e => setConfirmTxt(e.target.value)} /><Button variant="danger" className="mt-4 w-full" disabled={confirmTxt !== 'DELETE'} onClick={remove}>Delete permanently</Button><button onClick={askDelete} className="mt-3 w-full text-center text-sm text-thor-blue hover:underline">Repairs still in progress? Ask our team to delete your account</button></Sheet>
       <Sheet open={steps} onClose={() => setSteps(false)} title="Install Thor Computer"><InstallSteps /><p className="mt-4 text-xs text-thor-text">On Android or desktop Chrome/Edge, use the browser menu and choose “Install app”.</p></Sheet>
     </div>)
 }

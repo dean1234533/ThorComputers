@@ -6,17 +6,18 @@ import { WithId } from '@/hooks/useFirestore'
 import { EngineerPublic, useEngineers } from '@/hooks/useEngineers'
 import { Avatar, Button, Stars, VerifiedBadge, cx, Badge } from './ui'
 import { ProviderBadge, ProviderTerms } from './ProviderNote'
-import { gbp, SERVICE_METHODS } from '@/types/domain'
+import { gbp, SERVICE_METHODS, SPECIALISATIONS } from '@/types/domain'
 
 export interface Quote {
   jobId: string; engineerId: string; totalPence: number; repairPence: number; diagnosticPence: number; calloutPence: number; durationHours: number; availability: string
   partsIncluded: boolean; partsNote?: string; warranty?: string; notes?: string; serviceMethod: string; status: string; provider?: 'independent' | 'thor'; expiresAt: { toDate(): Date }; version: number
+  labourPence?: number; partsEstimatePence?: number; earliestAppointment?: string; includedServices?: string; excludedServices?: string; commissionBps?: number; engineerSharePence?: number
 }
 const method = (id: string) => SERVICE_METHODS.find(m => m.id === id)?.label ?? id
 export const engName = (e?: EngineerPublic | null) => e?.businessName || e?.displayName || 'Engineer'
 
 function PriceBreakdown({ q }: { q: Quote }) {
-  const rows: [string, number][] = [['Repair', q.repairPence], ...(q.diagnosticPence ? [['Diagnostic', q.diagnosticPence] as [string, number]] : []), ...(q.calloutPence ? [['Call-out', q.calloutPence] as [string, number]] : [])]
+  const rows: [string, number][] = [...(q.labourPence !== undefined && q.partsEstimatePence !== undefined ? [['Labour', q.labourPence], ['Parts (estimate)', q.partsEstimatePence]] as [string, number][] : [['Repair', q.repairPence] as [string, number]]), ...(q.diagnosticPence ? [['Diagnostic', q.diagnosticPence] as [string, number]] : []), ...(q.calloutPence ? [['Call-out', q.calloutPence] as [string, number]] : [])]
   return <dl className="space-y-1 text-sm">{rows.map(([k, v]) => <div key={k} className="flex justify-between text-thor-text"><dt>{k}</dt><dd>{gbp(v)}</dd></div>)}
     <div className="flex justify-between border-t border-ink/10 pt-1.5 font-bold text-ink"><dt>You pay</dt><dd>{gbp(q.totalPence)}</dd></div></dl>
 }
@@ -49,11 +50,13 @@ export default function QuoteCompare({ quotes, onSelect, busyId, canSelect }: { 
               </div>
               <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                 <ul className="space-y-1.5 text-thor-text"><li className="flex gap-2"><Clock className="size-4 shrink-0 text-thor-blue" />About {q.durationHours} hour{q.durationHours === 1 ? '' : 's'} · {method(q.serviceMethod)}</li>
-                  <li className="flex gap-2"><CalendarDays className="size-4 shrink-0 text-thor-blue" />{q.availability}</li>
+                  <li className="flex gap-2"><CalendarDays className="size-4 shrink-0 text-thor-blue" />{q.earliestAppointment ? `Earliest ${new Date(q.earliestAppointment + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ` : ''}{q.availability}</li>
                   <li className="flex gap-2"><Wallet className="size-4 shrink-0 text-thor-blue" />Parts {q.partsIncluded ? 'included' : 'not included'}{q.partsNote ? `: ${q.partsNote}` : ''}</li>
                   {q.warranty && <li className="flex gap-2"><ShieldCheck className="size-4 shrink-0 text-thor-blue" />{q.warranty}</li>}</ul>
                 <PriceBreakdown q={q} />
               </div>
+              {(q.includedServices || q.excludedServices) && <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">{q.includedServices && <div><dt className="font-medium text-ok">Included</dt><dd className="text-thor-text">{q.includedServices}</dd></div>}{q.excludedServices && <div><dt className="font-medium text-bad">Not included</dt><dd className="text-thor-text">{q.excludedServices}</dd></div>}</dl>}
+              {e && <p className="mt-2 text-xs text-thor-text">Specialises in {e.specialisations.slice(0, 4).map(s => SPECIALISATIONS.find(x => x.id === s)?.label ?? s).join(', ')} · covers {e.areasCovered.slice(0, 3).join(', ')}</p>}
               {q.notes && <p className="mt-3 rounded-xl bg-paper p-3 text-sm italic text-thor-slate">“{q.notes}”</p>}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 {canSelect && <Button variant="cta" loading={busyId === q.id} onClick={() => onSelect(q.id)}>Select engineer</Button>}
@@ -72,10 +75,13 @@ export default function QuoteCompare({ quotes, onSelect, busyId, canSelect }: { 
 
 function CompareTable({ quotes, engineers, onSelect, busyId, canSelect }: { quotes: WithId<Quote>[]; engineers: Record<string, EngineerPublic | null>; onSelect: (id: string) => void; busyId?: string; canSelect: boolean }) {
   const rows: [string, (q: WithId<Quote>, e?: EngineerPublic | null) => React.ReactNode][] = [
-    ['Total price', q => <b className="text-lg text-thor-blue">{gbp(q.totalPence)}</b>], ['Repair', q => gbp(q.repairPence)], ['Diagnostic', q => (q.diagnosticPence ? gbp(q.diagnosticPence) : 'None')], ['Call-out', q => (q.calloutPence ? gbp(q.calloutPence) : 'None')],
+    ['Total price', q => <b className="text-lg text-thor-blue">{gbp(q.totalPence)}</b>], ['Repair', q => gbp(q.repairPence)], ['Labour / parts', q => q.labourPence !== undefined && q.partsEstimatePence !== undefined ? `${gbp(q.labourPence)} / ${gbp(q.partsEstimatePence)}` : 'Not itemised'], ['Diagnostic', q => (q.diagnosticPence ? gbp(q.diagnosticPence) : 'None')], ['Call-out', q => (q.calloutPence ? gbp(q.calloutPence) : 'None')],
     ['Rating', (_, e) => <Stars value={e?.ratingAvg ?? 0} count={e?.reviewCount ?? 0} />], ['Experience', (_, e) => `${e?.yearsExperience ?? 0} years`], ['Jobs completed', (_, e) => e?.completedJobs ?? 0],
     ['Verified qualifications', (_, e) => e?.verifiedQualifications.length ? e.verifiedQualifications.map(v => v.name).join(', ') : 'None verified'], ['Duration', q => `${q.durationHours} h`], ['Method', q => method(q.serviceMethod)],
-    ['Availability', q => q.availability], ['Parts', q => (q.partsIncluded ? 'Included' : 'Not included')], ['Warranty', q => q.warranty || 'Not stated'], ['Provider', q => (q.provider === 'thor' ? 'Thor Computer' : 'Independent')],
+    ['Earliest appointment', q => q.earliestAppointment ? new Date(q.earliestAppointment + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'See availability'], ['Availability', q => q.availability],
+    ['Included', q => q.includedServices || 'Not stated'], ['Not included', q => q.excludedServices || 'Not stated'],
+    ['Verification', (_, e) => e?.verifiedQualifications.length ? 'Qualifications verified by Thor' : 'Identity approved, qualifications unverified'], ['Self-reported certifications', (_, e) => e?.selfReportedCerts || 'None'],
+    ['Specialisations', (_, e) => e?.specialisations.map(s => SPECIALISATIONS.find(x => x.id === s)?.label ?? s).join(', ') ?? ''], ['Service areas', (_, e) => e?.areasCovered.join(', ') ?? ''], ['Parts', q => (q.partsIncluded ? 'Included' : 'Not included')], ['Warranty', q => q.warranty || 'Not stated'], ['Provider', q => (q.provider === 'thor' ? 'Thor Computer' : 'Independent')],
   ]
   // Horizontal scroll with snap on phones; the label column stays pinned so the table remains readable.
   return (
