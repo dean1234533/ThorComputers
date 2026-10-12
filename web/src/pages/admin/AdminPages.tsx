@@ -21,10 +21,15 @@ function NoteSheet({ open, title, action, onClose, onSubmit, danger }: { open: b
 }
 
 // ---------- overview ----------
+interface RecentActivity { id: string; action: string; target: string; createdAt: number | null }
 export function AdminOverview() {
   const [s, setS] = useState<any>(null); const [err, setErr] = useState('')
+  const [activityAction, setActivityAction] = useState('')
   useEffect(() => { api.adminStats({}).then(setS).catch(e => setErr(errMsg(e))) }, [])
   if (err) return <EmptyState icon={ShieldCheck} title="Can’t load stats" body={err} />
+  const recentActivity: RecentActivity[] = s?.recentActivity ?? []
+  const activityActions = [...new Set(recentActivity.map(a => a.action))].sort()
+  const filteredActivity = recentActivity.filter(a => !activityAction || a.action === activityAction)
   const t = s?.totals; const days = s ? Object.entries<number>(s.requestsPerDay).sort() : []; const max = Math.max(1, ...days.map(d => d[1]))
   const tiles: [string, number | undefined, typeof Users, string][] = [['Customers', t?.customers, Users, '/admin/customers'], ['Engineers', t?.engineers, HardHat, '/admin/engineers'], ['Pending approvals', t?.pendingApprovals, ShieldCheck, '/admin/approvals'], ['Open requests', t?.openJobs, ClipboardList, '/admin/jobs'], ['Active quotations', t?.activeQuotes, Receipt, '/admin/quotations'], ['Confirmed bookings', t?.confirmed, CalendarCheck, '/admin/appointments'], ['Completed jobs', t?.completed, CheckCircle2, '/admin/jobs'], ['Open reports', t?.reports, Flag, '/admin/reports']]
   return (
@@ -33,7 +38,18 @@ export function AdminOverview() {
       <Section title="New requests, last 14 days"><div className="surface p-5">{!s ? <Skeleton className="h-40" /> : days.length === 0 ? <p className="py-8 text-center text-thor-text">No requests in this period.</p> :
         <><svg viewBox={`0 0 ${days.length * 28} 120`} className="h-40 w-full" role="img" aria-label="Bar chart of new repair requests per day">{days.map(([d, n], i) => <g key={d}><rect x={i * 28 + 4} y={100 - (n / max) * 90} width="20" height={(n / max) * 90} rx="4" fill="#225AA5" /><text x={i * 28 + 14} y={96 - (n / max) * 90} textAnchor="middle" fontSize="9" fill="#12233D">{n}</text><text x={i * 28 + 14} y="114" textAnchor="middle" fontSize="8" fill="#7A7A7A">{d.slice(8)}</text></g>)}</svg>
           <table className="sr-only"><caption>Requests per day</caption><tbody>{days.map(([d, n]) => <tr key={d}><th>{d}</th><td>{n}</td></tr>)}</tbody></table></>}</div></Section>
-      <Section title="Recent activity">{!s ? <ListSkeleton rows={2} /> : <ul className="divide-y divide-ink/8 surface px-5">{s.recentActivity.length === 0 && <li className="py-4 text-sm text-thor-text">Nothing yet.</li>}{s.recentActivity.map((a: any) => <li key={a.id} className="flex justify-between gap-3 py-3 text-sm"><span><b>{a.action}</b> <span className="text-thor-text">{a.target}</span></span><span className="text-xs text-thor-text">{new Date(a.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span></li>)}</ul>}</Section></div>)
+      <Section title="Recent activity">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div className="w-full sm:w-56"><Select label="Filter by action" value={activityAction} onChange={e => setActivityAction(e.target.value)} disabled={!s || recentActivity.length === 0}>
+            <option value="">All actions</option>{activityActions.map(action => <option key={action} value={action}>{action}</option>)}
+          </Select></div>
+          {s && <p className="text-xs text-thor-text" role="status">Showing {filteredActivity.length} of {recentActivity.length} latest entries</p>}
+        </div>
+        {!s ? <ListSkeleton rows={2} /> : <ul className="divide-y divide-ink/8 surface px-5">
+          {filteredActivity.length === 0 && <li className="py-4 text-sm text-thor-text">{recentActivity.length === 0 ? 'Nothing yet.' : 'No recent activity matches this filter.'}</li>}
+          {filteredActivity.map(a => <li key={a.id} className="flex flex-wrap justify-between gap-3 py-3 text-sm"><span className="min-w-0 break-words"><b>{a.action}</b> <span className="text-thor-text">{a.target}</span></span><span className="text-xs text-thor-text">{a.createdAt === null ? 'Date unavailable' : new Date(a.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span></li>)}
+        </ul>}
+      </Section></div>)
 }
 
 // ---------- approvals ----------
