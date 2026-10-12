@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage'
-import { AlertTriangle, BadgeCheck, Camera, Clock, FileText, Trash2, Upload, XCircle } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Camera, Clock, FileText, Trash2, Upload, XCircle, ExternalLink } from 'lucide-react'
 import { db, storage } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
@@ -28,7 +28,11 @@ export default function EngineerOnboarding() {
   const app = useDoc<Application>(`engineerApplications/${user!.uid}`)
   const quals = useQuery<Qual>('engineerQualifications', () => [where('engineerId', '==', user!.uid)], [user!.uid])
   const [p, setP] = useState<AppProfile>(() => normaliseProfile());
-  const [errors, setErrors] = useState<Record<string, string>>({}); const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null); const [uploadError, setUploadError] = useState(''); const [busy, setBusy] = useState(''); const [q, setQ] = useState({ name: '', issuer: '' }); const [file, setFile] = useState<File | null>(null); const [areas, setAreas] = useState('')
+  const [errors, setErrors] = useState<Record<string, string>>({}); const [notice, setNotice] = useState<{ kind: 'ok' | 'bad'; text: string } | null>(null); const [uploadError, setUploadError] = useState(''); const [uploadNotice, setUploadNotice] = useState(''); const [savedQuals, setSavedQuals] = useState<(Qual & { id: string })[]>([]); const [busy, setBusy] = useState(''); const [q, setQ] = useState({ name: '', issuer: '' }); const [file, setFile] = useState<File | null>(null); const [areas, setAreas] = useState('')
+  const certificates = [...quals.data, ...savedQuals.filter(saved => !quals.data.some(q => q.id === saved.id))]
+  useEffect(() => {
+    setSavedQuals(saved => { const waiting = saved.filter(q => !quals.data.some(record => record.id === q.id)); return waiting.length === saved.length ? saved : waiting })
+  }, [quals.data, savedQuals])
   const status = (app.data?.status ?? 'draft') as keyof typeof STATUS
   const editable = ['draft', 'info_requested'].includes(status), approved = status === 'approved'
 
@@ -48,7 +52,7 @@ export default function EngineerOnboarding() {
     } catch (e) { setNotice({ kind: 'bad', text: errMsg(e) }); return false } finally { if (!silent) setBusy('') }
   }
   const validate = (submission: boolean) => {
-    const next = profileErrors(body(), { submission, hasCertificate: quals.data.length > 0 })
+    const next = profileErrors(body(), { submission, hasCertificate: certificates.length > 0 })
     setErrors(next); setNotice(null)
     return Object.keys(next).length === 0
   }
@@ -75,17 +79,35 @@ export default function EngineerOnboarding() {
   const addQual = async () => {
     if (!file || !q.name.trim() || busy) return
     if (file.size >= 10 * 1024 * 1024) { setUploadError('Choose a file smaller than 10 MB.'); return }
-    setBusy('qual'); setUploadError(''); setNotice(null)
+    setBusy('qual'); setUploadError(''); setUploadNotice(''); setNotice(null)
     try { const isPdf = file.type === 'application/pdf'; const path = `qualifications/${user!.uid}/${rid()}.${isPdf ? 'pdf' : 'jpg'}`
       if (isPdf) await uploadBytes(ref(storage, path), file, { contentType: 'application/pdf' }); else await uploadImage(path, file)
-      await addDoc(collection(db, 'engineerQualifications'), { engineerId: user!.uid, name: q.name.trim(), issuer: q.issuer.trim(), storagePath: path, verification: 'pending', createdAt: serverTimestamp() })
-      setQ({ name: '', issuer: '' }); setFile(null); setErrors({}); setNotice({ kind: 'ok', text: 'Certificate added. Our team will check it before adding a verified badge.' })
+      const metadata: Qual = { name: q.name.trim(), issuer: q.issuer.trim(), storagePath: path, verification: 'pending' }
+      const record = await addDoc(collection(db, 'engineerQualifications'), { engineerId: user!.uid, ...metadata, createdAt: serverTimestamp() })
+      setSavedQuals(saved => [...saved, { ...metadata, id: record.id }])
+      setQ({ name: '', issuer: '' }); setFile(null); setErrors({}); setUploadNotice('Certificate uploaded. It’s now waiting for our team to check it.')
     } catch (e) { setUploadError(errMsg(e)) } finally { setBusy('') }
   }
   const removeQual = async (id: string) => {
     if (busy) return
     setBusy('remove'); setUploadError(''); setNotice(null)
-    try { await deleteDoc(doc(db, 'engineerQualifications', id)) } catch (e) { setUploadError(errMsg(e)) } finally { setBusy('') }
+    try { await deleteDoc(doc(db, 'engineerQualifications', id)); setSavedQuals(saved => saved.filter(q => q.id !== id)); setUploadNotice('Certificate removed.') } catch (e) { setUploadError(errMsg(e)) } finally { setBusy('') }
+  }
+
+  const chooseCertificate = (selected?: File) => {
+    if (!selected) return
+    setUploadError(''); setUploadNotice('')
+    if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+      setFile(null); setUploadError('Choose a PDF, JPG, PNG or WebP file.'); return
+    }
+    if (selected.size >= 10 * 1024 * 1024) { setFile(null); setUploadError('Choose a file smaller than 10 MB.'); return }
+    setFile(selected)
+    setQ(previous => ({ ...previous, name: previous.name.trim() || selected.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() || 'Certificate' }))
+  }
+  const openCertificate = async (path: string) => {
+    setUploadError('')
+    try { const url = await getDownloadURL(ref(storage, path)); window.open(url, '_blank', 'noopener,noreferrer') }
+    catch { setUploadError('We couldn’t open this certificate. Please try again.') }
   }
 
   if (app.loading) return <ListSkeleton />
@@ -113,16 +135,21 @@ export default function EngineerOnboarding() {
       </Section>
 
       <Section title="Qualifications">
-        <p className="mb-3 text-sm text-thor-text">Upload certificates (PDF or photo). They’re private. Only authorised Thor Computer staff can open them. A “verified” badge appears only after a person has checked the document.</p>
-        <ul className="mb-4 divide-y divide-ink/8 rounded-2xl bg-white shadow-sm ring-1 ring-ink/5">{quals.data.map(x => <li key={x.id} className="flex items-center gap-3 p-4"><FileText className="size-5 text-thor-blue" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{x.name}</p><p className="text-xs text-thor-text">{x.issuer}{x.verificationNote && ` · ${x.verificationNote}`}</p></div>
-          <Badge tone={x.verification === 'verified' ? 'ok' : x.verification === 'rejected' ? 'bad' : 'warn'}>{x.verification === 'pending' ? 'Awaiting review' : x.verification}</Badge>
-          {x.verification !== 'verified' && editable && <button aria-label="Remove" disabled={!!busy} onClick={() => removeQual(x.id)} className="rounded-full p-2 text-thor-text hover:bg-bad/10 hover:text-bad"><Trash2 className="size-4" /></button>}</li>)}
-          {quals.data.length === 0 && <li className="p-4 text-sm text-thor-text">Nothing uploaded yet.</li>}</ul>
+        <p className="mb-4 text-sm text-thor-text">Your certificates are private. Our team checks them before adding a verified badge.</p>
+        {quals.loading && certificates.length === 0 ? <ListSkeleton rows={1} /> : quals.error ? <p role="alert" className="mb-4 rounded-xl bg-bad/10 p-3 text-sm text-bad">We couldn’t load your certificates. Refresh the page to try again.</p> : certificates.length === 0 && busy !== 'qual' && !file ? <p className="mb-4 text-sm text-thor-text">Add a certificate to complete your application.</p> : null}
+        {certificates.length > 0 && <ul className="mb-4 divide-y divide-ink/8 surface">{certificates.map(x => <li key={x.id} className="flex flex-wrap items-center gap-3 p-4"><FileText className="size-5 shrink-0 text-thor-blue" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{x.name}</p>{x.issuer && <p className="text-xs text-thor-text">{x.issuer}</p>}{x.verificationNote && <p className="text-xs text-thor-text">{x.verificationNote}</p>}</div>
+          <Badge tone={x.verification === 'verified' ? 'ok' : x.verification === 'rejected' ? 'bad' : 'warn'}>{x.verification === 'pending' ? 'Waiting for review' : x.verification === 'verified' ? 'Verified' : 'Not approved'}</Badge>
+          <button type="button" onClick={() => openCertificate(x.storagePath)} aria-label={`Open ${x.name}`} className="rounded-full p-2 text-thor-blue hover:bg-thor-blue/10"><ExternalLink className="size-4" /></button>
+          {x.verification !== 'verified' && editable && <button type="button" aria-label={`Remove ${x.name}`} disabled={!!busy} onClick={() => removeQual(x.id)} className="rounded-full p-2 text-thor-text hover:bg-bad/10 hover:text-bad"><Trash2 className="size-4" /></button>}</li>)}</ul>}
         {errors.qualifications && <p role="alert" className="mb-3 text-sm text-bad">{errors.qualifications}</p>}
         {uploadError && <p role="alert" className="mb-3 text-sm text-bad">{uploadError}</p>}
-        <fieldset disabled={!!busy || (!editable && !approved)} className="space-y-3 rounded-2xl border border-dashed border-ink/20 p-4"><div className="grid gap-3 sm:grid-cols-2"><Input label="Qualification" value={q.name} onChange={e => setQ({ ...q, name: e.target.value })} /><Input label="Issued by" value={q.issuer} onChange={e => setQ({ ...q, issuer: e.target.value })} /></div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-thor-blue"><Upload className="size-4" />{file ? file.name : 'Choose file (PDF or image, max 10 MB)'}<input type="file" accept="application/pdf,image/*" className="sr-only" onChange={e => setFile(e.target.files?.[0] ?? null)} /></label>
-          <Button size="sm" variant="soft" onClick={addQual} loading={busy === 'qual'} disabled={!!busy || !file || !q.name.trim()}>Upload</Button></fieldset>
+        {uploadNotice && <p role="status" className="mb-3 rounded-xl bg-ok/10 p-3 text-sm text-ok">{uploadNotice}</p>}
+        {(editable || approved) && <fieldset disabled={!!busy} className="space-y-4 rounded-2xl border border-dashed border-ink/20 p-4">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-thor-blue/5 p-4 text-sm font-medium text-thor-blue"><Upload className="size-5 shrink-0" /><span>{file ? 'Choose a different file' : 'Choose a certificate'}<span className="mt-1 block text-xs font-normal text-thor-text">PDF, JPG, PNG or WebP. Smaller than 10 MB.</span></span><input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" aria-label="Choose a certificate" className="sr-only" onChange={e => { chooseCertificate(e.target.files?.[0]); e.target.value = '' }} /></label>
+          {file && <><div role="status" className="rounded-xl bg-paper p-3"><p className="break-words text-sm font-medium">{file.name}</p><p className="mt-1 text-xs text-thor-text">{busy === 'qual' ? 'Uploading your certificate…' : 'Ready to upload. Choose Upload certificate to save it.'}</p></div>
+            <div className="grid gap-3 sm:grid-cols-2"><Input label="Certificate name" value={q.name} onChange={e => setQ({ ...q, name: e.target.value })} /><Input label="Issued by (optional)" value={q.issuer} onChange={e => setQ({ ...q, issuer: e.target.value })} /></div>
+            <Button type="button" onClick={addQual} loading={busy === 'qual'} disabled={!!busy || !q.name.trim()}>{busy === 'qual' ? 'Uploading…' : 'Upload certificate'}</Button></>}
+        </fieldset>}
       </Section>
 
       {Object.keys(errors).length > 0 && <p role="alert" className="mb-3 text-sm text-bad">Please check the highlighted fields before continuing.</p>}
