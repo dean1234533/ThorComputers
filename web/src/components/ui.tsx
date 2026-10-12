@@ -1,6 +1,6 @@
 import { createContext, forwardRef, useCallback, useContext, useEffect, useId, useState, ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { BadgeCheck, CheckCircle2, AlertCircle, Info, Loader2, Star, X } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, AlertCircle, Info, Loader2, Star, X, UserRound } from 'lucide-react'
 import { JOB_STATUS_LABEL, JobStatus } from '@/types/domain'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
@@ -40,7 +40,7 @@ function Shell({ label, hint, error, id, children }: FieldShell & { id: string; 
     </div>
   )
 }
-const inputCls = 'ui-input w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-base text-ink placeholder:text-thor-text/70 transition focus:border-thor-blue focus:outline-none focus:ring-4 focus:ring-thor-sky/30 aria-[invalid=true]:border-bad'
+const inputCls = 'ui-input w-full rounded-xl border border-ink/15 bg-white px-3.5 py-2.5 text-base text-ink transition focus:border-thor-blue focus:outline-none focus:ring-4 focus:ring-thor-sky/30 aria-[invalid=true]:border-bad'
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & FieldShell>(({ label, hint, error, className, ...p }, ref) => {
   const id = useId(); return <Shell {...{ label, hint, error, id }}><input ref={ref} id={id} aria-invalid={!!error} aria-describedby={error ? `${id}-e` : hint ? `${id}-h` : undefined} className={cx(inputCls, 'h-11', className)} {...p} /></Shell>
 })
@@ -98,9 +98,10 @@ export function StarInput({ label, value, onChange }: { label: string; value: nu
   )
 }
 export function Avatar({ src, name, size = 44 }: { src?: string | null; name: string; size?: number }) {
-  const initials = name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase()
-  return src ? <img src={src} alt="" width={size} height={size} loading="lazy" className="rounded-full object-cover bg-ink/10" style={{ width: size, height: size }} />
-    : <span aria-hidden className="grid shrink-0 place-items-center rounded-full bg-thor-blue text-white font-medium" style={{ width: size, height: size, fontSize: size / 2.6 }}>{initials}</span>
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const initials = name === '?' ? '' : name.trim().split(/\s+/).filter(Boolean).map(s => s[0]).slice(0, 2).join('').toUpperCase()
+  return src && src !== failedSrc ? <img src={src} alt="" width={size} height={size} loading="lazy" onError={() => setFailedSrc(src)} className="rounded-full object-cover bg-ink/10" style={{ width: size, height: size }} />
+    : <span aria-hidden className="grid shrink-0 place-items-center rounded-full bg-thor-blue text-white font-medium" style={{ width: size, height: size, fontSize: size / 2.6 }}>{initials || <UserRound style={{ width: size / 2, height: size / 2 }} />}</span>
 }
 
 export function EmptyState({ icon: Icon, title, body, action }: { icon: React.ComponentType<{ className?: string }>; title: string; body: string; action?: ReactNode }) {

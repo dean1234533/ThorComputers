@@ -42,7 +42,7 @@ export default function QuoteCompare({ quotes, onSelect, busyId, canSelect }: { 
                 <Avatar src={e?.photoURL} name={engName(e)} size={56} />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2"><h3 className="font-display text-lg leading-tight">{engName(e)}</h3>{(e?.verifiedQualifications.length ?? 0) > 0 && <VerifiedBadge />}</div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-thor-text"><Stars value={e?.ratingAvg ?? 0} count={e?.reviewCount ?? 0} /><span>{e?.yearsExperience ?? 0} yrs experience</span><span>{e?.completedJobs ?? 0} jobs</span></div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-thor-text"><Stars value={e?.ratingAvg ?? 0} count={e?.reviewCount ?? 0} />{e && <><span>{e.yearsExperience} yrs experience</span><span>{e.completedJobs} jobs</span></>}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5"><ProviderBadge provider={q.provider} />{e?.verifiedQualifications.slice(0, 3).map(v => <Badge key={v.name} tone="ok"><Check className="size-3" />{v.name}</Badge>)}{q.totalPence === cheapest && quotes.length > 1 && <Badge tone="warn">Lowest price</Badge>}</div>
                 </div>
                 <div className="text-right"><p className="font-display text-2xl font-semibold text-thor-blue">{gbp(q.totalPence)}</p><p className="text-xs text-thor-text">total</p></div>

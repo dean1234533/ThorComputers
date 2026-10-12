@@ -49,7 +49,4 @@ export const api = {
   getEnquiry: fn<{ id: string; token: string }, { fields: Record<string, string> }>('getEnquiry'),
 }
 
-export const errMsg = (e: unknown) => {
-  const m = (e as { message?: string })?.message ?? 'Something went wrong.'
-  return m.replace(/^.*?:\s*/, '').replace(/\(functions\/[\w-]+\)\.?$/, '').trim() || 'Something went wrong.'
-}
+export { userMessage as errMsg } from './errors'

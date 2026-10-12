@@ -19,9 +19,9 @@ export default function Settings() {
   const [support, setSupport] = useState<PushSupport>('unsupported'); const [perm, setPerm] = useState(permission()); const [del, setDel] = useState(false); const [confirmTxt, setConfirmTxt] = useState(''); const [steps, setSteps] = useState(false)
   useEffect(() => { pushSupport().then(setSupport) }, [])
   const prefs = profile?.notificationPrefs ?? { push: {}, email: {} }
-  const setPref = async (ch: 'push' | 'email', k: string, v: boolean) => { try { await updateDoc(doc(db, 'users', user!.uid), { [`notificationPrefs.${ch}.${k}`]: v, updatedAt: serverTimestamp() }) } catch { toast('bad', 'Could not save.') } }
+  const setPref = async (ch: 'push' | 'email', k: string, v: boolean) => { try { await updateDoc(doc(db, 'users', user!.uid), { [`notificationPrefs.${ch}.${k}`]: v, updatedAt: serverTimestamp() }) } catch { toast('bad', 'We couldn’t save your notification choices. Please try again.') } }
   const togglePush = async () => {
-    try { if (perm === 'granted') { await disablePush(user!.uid); toast('info', 'Push notifications turned off on this device.') } else { const r = await enablePush(user!.uid); toast(r === 'granted' ? 'ok' : 'info', r === 'granted' ? 'Notifications enabled.' : 'Permission not granted.') } } catch (e) { toast('bad', errMsg(e)) }
+    try { if (perm === 'granted') { await disablePush(user!.uid); toast('info', 'Notifications are now off on this device.') } else { const r = await enablePush(user!.uid); toast(r === 'granted' ? 'ok' : 'info', r === 'granted' ? 'Notifications are now on.' : 'Notifications are still off. You can turn them on in your browser settings.') } } catch (e) { toast('bad', errMsg(e)) }
     setPerm(permission())
   }
   const exportData = async () => { try { const d = await api.exportMyData({}); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(d, null, 2)], { type: 'application/json' })); a.download = 'thor-computer-my-data.json'; a.click(); toast('ok', 'Your data has been downloaded.') } catch (e) { toast('bad', errMsg(e)) } }

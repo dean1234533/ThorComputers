@@ -92,15 +92,15 @@ export default function NewRequest() {
           </div>{errs.device && <p role="alert" className="text-sm text-bad">{errs.device}</p>}</>}
 
         {step === 1 && <><h1 className="font-display text-2xl">Tell us about the device</h1>
-          <Input label="Manufacturer" placeholder="e.g. Dell, Apple, HP" value={d.manufacturer} onChange={e => set('manufacturer', e.target.value)} error={errs.manufacturer} />
-          <Input label="Model" placeholder="e.g. XPS 13 9310" value={d.model} onChange={e => set('model', e.target.value)} error={errs.model} />
-          <Input label="Operating system (optional)" placeholder="e.g. Windows 11, macOS Sonoma" value={d.os} onChange={e => set('os', e.target.value)} />
+          <Input label="Manufacturer" value={d.manufacturer} onChange={e => set('manufacturer', e.target.value)} error={errs.manufacturer} />
+          <Input label="Model" value={d.model} onChange={e => set('model', e.target.value)} error={errs.model} />
+          <Input label="Operating system (optional)" value={d.os} onChange={e => set('os', e.target.value)} />
           <Input label="Serial number (optional)" hint="Private. Only shared with your selected engineer." value={d.serial} onChange={e => set('serial', e.target.value)} /></>}
 
         {step === 2 && <><h1 className="font-display text-2xl">What’s the problem?</h1>
           <Chips multi label="Common issues" options={COMMON_ISSUES.map(i => ({ id: i, label: i }))} value={d.issues as never[]} onChange={v => set('issues', v)} />
           <Textarea label="Describe what’s happening" value={d.description} onChange={e => set('description', e.target.value)} error={errs.description} maxLength={2000} hint="Don’t include phone numbers or your address here. Listings are visible to engineers." />
-          <Input label="When did it start?" placeholder="e.g. Yesterday, last week" value={d.startedAt} onChange={e => set('startedAt', e.target.value)} />
+          <Input label="When did it start?" value={d.startedAt} onChange={e => set('startedAt', e.target.value)} />
           <Chips label="How urgent is it?" options={[{ id: 'flexible', label: 'Flexible' }, { id: 'soon', label: 'Within a few days' }, { id: 'urgent', label: 'Urgent' }]} value={[d.urgency]} onChange={v => set('urgency', v[0])} />
           <div><p className="mb-2 text-sm font-medium">Photos (optional, up to 6)</p>
             <div className="flex flex-wrap gap-3">{photos.map((p, i) => <div key={p.url} className="relative"><img src={p.url} alt={`Device photo ${i + 1}`} className="size-20 rounded-xl object-cover" /><button type="button" aria-label="Remove photo" onClick={() => setPhotos(ps => ps.filter((_, j) => j !== i))} className="absolute -right-2 -top-2 grid size-6 place-items-center rounded-full bg-ink text-white"><X className="size-3.5" /></button></div>)}

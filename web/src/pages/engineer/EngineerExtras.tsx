@@ -19,7 +19,7 @@ export function EngineerDashboard() {
   return (
     <div><PageHeader title={`Hello, ${profile?.fullName.split(' ')[0] ?? ''}`} sub="Your engineer dashboard." />
       {!approved ? <div className="rounded-3xl bg-thor-blue p-6 text-white"><h2 className="font-display text-xl">{app.data?.status === 'pending' ? 'Your application is being reviewed' : 'Finish your application'}</h2><p className="mt-1.5 text-white/80">{app.data?.status === 'pending' ? 'We’ll notify you as soon as there’s a decision.' : 'Complete your profile and upload qualifications to start receiving jobs.'}</p><Link to="/engineer/profile"><Button variant="cta" className="mt-4">{app.data?.status === 'pending' ? 'View application' : 'Continue'}</Button></Link></div> :
-        <><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Tile icon={Search} label="Browse jobs" value="Open" to="/engineer/jobs" /><Tile icon={FileText} label="Live quotations" value={live.data.length} to="/engineer/quotations" /><Tile icon={Briefcase} label="Active jobs" value={active} to="/engineer/my-jobs" /><Tile icon={Star} label="Rating" value={prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : '—'} to="/engineer/reviews" /></div>
+        <><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Tile icon={Search} label="Browse jobs" value="Open" to="/engineer/jobs" /><Tile icon={FileText} label="Live quotations" value={live.data.length} to="/engineer/quotations" /><Tile icon={Briefcase} label="Active jobs" value={active} to="/engineer/my-jobs" /><Tile icon={Star} label="Rating" value={prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : 'Not rated'} to="/engineer/reviews" /></div>
           <p className="mt-6 text-sm text-thor-text">Completed jobs: <b className="text-ink">{prof.data?.completedJobs ?? 0}</b></p></>}</div>)
 }
 
@@ -30,7 +30,7 @@ export function EngineerReviews() {
   const r = useQuery<Review>('reviews', () => [where('subjectId', '==', user!.uid), where('direction', '==', 'customer_to_engineer'), where('status', '==', 'published'), orderBy('createdAt', 'desc'), limit(30)], [user!.uid])
   return (
     <div><PageHeader title="Reviews" sub="Your reputation on Thor Computer." />
-      <div className="mb-6 flex items-center gap-4 surface p-6"><p className="font-display text-5xl text-thor-blue">{prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : '—'}</p><div><Stars value={prof.data?.ratingAvg ?? 0} count={prof.data?.reviewCount ?? 0} /><p className="text-sm text-thor-text">{prof.data?.reviewCount ?? 0} review(s)</p></div></div>
+      <div className="mb-6 flex items-center gap-4 surface p-6"><p className="font-display text-5xl text-thor-blue">{prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : 'Not rated'}</p><div><Stars value={prof.data?.ratingAvg ?? 0} count={prof.data?.reviewCount ?? 0} /><p className="text-sm text-thor-text">{prof.data?.reviewCount ?? 0} review(s)</p></div></div>
       {r.loading ? <ListSkeleton rows={2} /> : r.data.length === 0 ? <EmptyState icon={Star} title="No reviews yet" body="Customers can review you after a completed repair." /> :
         <ul className="divide-y divide-ink/8 surface px-5">{r.data.map((x, i) => <li key={i} className="py-4"><div className="flex items-center justify-between"><Stars value={x.rating} /><span className="text-xs text-thor-text">{x.reference}</span></div>{x.text && <p className="mt-1.5 text-sm">{x.text}</p>}</li>)}</ul>}</div>)
 }

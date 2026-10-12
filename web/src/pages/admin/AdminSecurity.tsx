@@ -9,8 +9,8 @@ import { Badge, Button, Input, PageHeader, Section, useToast } from '@/component
 
 const MODE_TEXT = {
   off: 'Two-step verification is optional for admins right now.',
-  warn: 'Two-step verification is encouraged. It becomes mandatory once a super admin switches enforcement on.',
-  enforce: 'Two-step verification is REQUIRED. Admin actions are refused from sessions that did not use a second factor.',
+  warn: 'Two-step verification is recommended. An administrator may make it required for the team.',
+  enforce: 'Two-step verification is required. Sign in using a code from your authenticator app to use the admin tools.',
 }
 
 export default function AdminSecurity() {
@@ -37,7 +37,7 @@ export default function AdminSecurity() {
       const u = auth.currentUser!, session = await multiFactor(u).getSession()
       const s = await TotpMultiFactorGenerator.generateSecret(session)
       setSecret(s); setQr(await QRCode.toDataURL(s.generateQrCodeUrl(u.email ?? 'admin', 'Thor Computer'), { margin: 1, width: 220 })); setStep('scan'); setPassword('')
-    } catch (e: any) { setErr(/wrong-password|invalid-credential/.test(e?.code ?? '') ? 'That password is not correct.' : /unverified-email/.test(e?.code ?? '') ? 'Verify your email address before enrolling.' : errMsg(e)) }
+    } catch (e: any) { setErr(/wrong-password|invalid-credential/.test(e?.code ?? '') ? 'That password is not correct.' : /unverified-email/.test(e?.code ?? '') ? 'Verify your email address before setting this up.' : errMsg(e)) }
     finally { setBusy(false) }
   }
   const finish = async () => {
@@ -51,7 +51,7 @@ export default function AdminSecurity() {
   const remove = async (uid: string) => {
     if (st?.mode === 'enforce' && factors.length <= 1) return
     setBusy(true)
-    try { await reauth(); await multiFactor(auth.currentUser!).unenroll(uid); toast('ok', 'Second factor removed.'); refresh() }
+    try { await reauth(); await multiFactor(auth.currentUser!).unenroll(uid); toast('ok', 'Authenticator app removed.'); refresh() }
     catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false); setPassword('') }
   }
 
@@ -61,16 +61,16 @@ export default function AdminSecurity() {
       {loadErr && <p role="alert" className="mb-4 rounded-xl bg-bad/10 p-3 text-sm text-bad">{loadErr}</p>}
       {st && <div className="mb-4 flex items-start gap-3 surface p-5">
         {st.sessionHasSecondFactor ? <ShieldCheck className="size-6 shrink-0 text-ok" /> : <ShieldAlert className="size-6 shrink-0 text-warn" />}
-        <div className="text-sm"><p className="font-medium">{st.sessionHasSecondFactor ? 'This session is protected by a second factor.' : 'This session did not use a second factor.'}</p><p className="mt-1 text-thor-text">{MODE_TEXT[st.mode]}</p>
-          {st.mode === 'enforce' && !st.sessionHasSecondFactor && <p className="mt-2 font-medium text-bad">{factors.length ? 'You are enrolled. Sign out and sign in again, entering your authenticator code, to continue.' : 'Enrol below to regain access to the admin tools.'}</p>}</div>
+        <div className="text-sm"><p className="font-medium">{st.sessionHasSecondFactor ? 'You signed in with two-step verification.' : 'You haven’t used a verification code for this sign-in.'}</p><p className="mt-1 text-thor-text">{MODE_TEXT[st.mode]}</p>
+          {st.mode === 'enforce' && !st.sessionHasSecondFactor && <p className="mt-2 font-medium text-bad">{factors.length ? 'You’ve set this up. Sign out, then sign in with your verification code to continue.' : 'Set up an authenticator app below to use the admin tools.'}</p>}</div>
       </div>}
 
       <Section title="Authenticator app">
         {factors.length > 0 && <ul className="mb-4 divide-y divide-ink/8 surface px-5">
-          {factors.map(f => <li key={f.uid} className="flex items-center justify-between gap-3 py-3"><div><p className="font-medium">{f.displayName ?? 'Authenticator app'}</p><p className="text-xs text-thor-text">Enrolled {new Date(f.enrollmentTime).toLocaleDateString('en-GB')}</p></div>
-            <Button variant="ghost" size="sm" loading={busy} disabled={st?.mode === 'enforce' && factors.length <= 1} title={st?.mode === 'enforce' && factors.length <= 1 ? 'You cannot remove your only factor while enforcement is on' : undefined} onClick={() => remove(f.uid)}>Remove</Button></li>)}
+          {factors.map(f => <li key={f.uid} className="flex items-center justify-between gap-3 py-3"><div><p className="font-medium">{f.displayName ?? 'Authenticator app'}</p><p className="text-xs text-thor-text">Added {new Date(f.enrollmentTime).toLocaleDateString('en-GB')}</p></div>
+            <Button variant="ghost" size="sm" loading={busy} disabled={st?.mode === 'enforce' && factors.length <= 1} title={st?.mode === 'enforce' && factors.length <= 1 ? 'You need to keep at least one authenticator app while two-step verification is required' : undefined} onClick={() => remove(f.uid)}>Remove</Button></li>)}
         </ul>}
-        {usesPassword && (step === 'idle' || step === 'password') && factors.length > 0 && <Input label="Password (needed to remove a factor)" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}
+        {usesPassword && (step === 'idle' || step === 'password') && factors.length > 0 && <Input label="Confirm your password to remove this authenticator app" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />}
         {step === 'idle' && <Button onClick={() => (usesPassword ? setStep('password') : begin())} size="lg">{factors.length ? 'Add another authenticator' : 'Set up authenticator app'}</Button>}
         {step === 'password' && <div className="space-y-4"><Input label="Confirm your password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} error={err} />
           <Button onClick={begin} loading={busy} disabled={!password}>Continue</Button></div>}
@@ -86,12 +86,12 @@ export default function AdminSecurity() {
         {err && step === 'idle' && <p role="alert" className="mt-2 text-sm text-bad">{err}</p>}
       </Section>
 
-      {perms.includes('admins.manage') && st?.admins && <Section title="Admin team readiness">
-        <p className="mb-3 text-sm text-thor-text">Before a super admin sets <code>REQUIRE_ADMIN_MFA=true</code> on the server, every active admin should be enrolled, or they will be locked out of admin actions until they enrol.</p>
+      {perms.includes('admins.manage') && st?.admins && <Section title="Team sign-in security">
+        <p className="mb-3 text-sm text-thor-text">Before two-step verification is made required, every administrator needs to set up an authenticator app.</p>
         <ul className="divide-y divide-ink/8 surface px-5">
-          {st.admins.map(a => <li key={a.uid} className="flex items-center justify-between py-3 text-sm"><span>{a.email || a.uid}</span>{a.enrolledFactors ? <Badge tone="ok">Enrolled</Badge> : <Badge tone="warn">Not enrolled</Badge>}</li>)}
+          {st.admins.map(a => <li key={a.uid} className="flex items-center justify-between py-3 text-sm"><span>{a.email || a.uid}</span>{a.enrolledFactors ? <Badge tone="ok">Set up</Badge> : <Badge tone="warn">Not set up</Badge>}</li>)}
         </ul>
-        <p className={`mt-3 text-sm font-medium ${notEnrolled.length ? 'text-warn' : 'text-ok'}`}>{notEnrolled.length ? `${notEnrolled.length} admin${notEnrolled.length === 1 ? '' : 's'} not yet enrolled: do not enforce yet.` : 'All admins are enrolled: safe to enforce.'}</p>
+        <p className={`mt-3 text-sm font-medium ${notEnrolled.length ? 'text-warn' : 'text-ok'}`}>{notEnrolled.length ? `${notEnrolled.length} admin${notEnrolled.length === 1 ? '' : 's'} still need to set up an authenticator app.` : 'Everyone has set up an authenticator app.'}</p>
       </Section>}
     </div>)
 }

@@ -32,12 +32,12 @@ export default function Login() {
     </AuthLayout>)
   return (
     <AuthLayout title="Welcome back" sub="Sign in to manage your repairs.">
-      {!isConfigured && <p className="mb-4 rounded-xl bg-warn/15 p-3 text-sm text-warn">Firebase isn’t configured yet. Copy <code>.env.example</code> to <code>.env</code> and add your project keys.</p>}
+      {!isConfigured && <p className="mb-4 rounded-xl bg-warn/15 p-3 text-sm text-warn">Sign-in is temporarily unavailable. Please try again later.</p>}
       <form onSubmit={submit} className="space-y-4" noValidate>
-        <Input label="Email" type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required />
-        <Input label="Password" type="password" autoComplete="current-password" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required />
+        <Input label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={e => setEmail(e.target.value)} required />
+        <Input label="Password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />
         {err && <p role="alert" className="text-sm text-bad">{err}</p>}
-        <Button type="submit" loading={busy} className="w-full" size="lg">Sign in</Button>
+        <Button type="submit" loading={busy} disabled={!isConfigured} className="w-full" size="lg">Sign in</Button>
         <div className="text-right"><Link to="/forgot" className="text-sm text-thor-blue hover:underline">Forgot password?</Link></div>
       </form>
       <p className="mt-6 text-center text-sm text-thor-text">New to Thor Computer? <Link to="/register" className="font-medium text-thor-blue hover:underline">Create an account</Link></p>

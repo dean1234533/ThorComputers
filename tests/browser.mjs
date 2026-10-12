@@ -164,10 +164,10 @@ async function mfaSession(label, mode, sessionHasSecondFactor = false) {
 }
 const enf = await mfaSession('mfa-enforced', 'enforce')
 await step('ENFORCE + not enrolled: admin is redirected to /admin/security, never into a wall of errors', async () => {
-  await login(enf, 'superadmin@demo.test'); await visit(enf, '/admin', { expectPath: '/admin/security', mustContain: 'REQUIRED' }); await visit(enf, '/admin/jobs', { expectPath: '/admin/security' })
+  await login(enf, 'superadmin@demo.test'); await visit(enf, '/admin', { expectPath: '/admin/security', mustContain: 'Two-step verification is required' }); await visit(enf, '/admin/jobs', { expectPath: '/admin/security' })
 })
 await step('ENFORCE: security page offers enrolment and the readiness table; non-admin pages still reachable; can sign out', async () => {
-  await visit(enf, '/admin/security', { mustContain: 'Set up authenticator app' }); const t = await bodyText(enf.page); ok(/Not enrolled/.test(t) && /safe to enforce|not yet enrolled/i.test(t), 'readiness table missing')
+  await visit(enf, '/admin/security', { mustContain: 'Set up authenticator app' }); const t = await bodyText(enf.page); ok(/Not set up/.test(t) && /Everyone has set up|still need to set up/i.test(t), 'readiness table missing')
   await visit(enf, '/settings'); await visit(enf, '/notifications')
   await enf.page.goto(`${WEB}/admin/security`); await settle(enf.page); await clickText(enf.page, 'Sign out'); await enf.page.waitForFunction(() => location.pathname === '/login', { timeout: 10000 })
 })
@@ -182,7 +182,7 @@ await step('WARN: admin keeps full access and sees a non-blocking reminder', asy
 })
 const enrolled = await mfaSession('mfa-enrolled', 'enforce', true)
 await step('ENFORCE + session has a second factor: normal access, no banner', async () => {
-  await login(enrolled, 'superadmin@demo.test'); await visit(enrolled, '/admin', { expectPath: '/admin', mustNot: ['Set it up now', 'REQUIRED'] })
+  await login(enrolled, 'superadmin@demo.test'); await visit(enrolled, '/admin', { expectPath: '/admin', mustNot: ['Set it up now', 'Two-step verification is required'] })
 })
 
 // ---------- report ----------

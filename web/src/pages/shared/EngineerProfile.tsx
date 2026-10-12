@@ -27,14 +27,14 @@ export default function EngineerProfile() {
           <div className="flex-1"><div className="flex flex-wrap items-center gap-2"><h1 className="font-display text-3xl font-semibold">{e.businessName || e.displayName}</h1></div>
             {e.businessName && <p className="text-white/80">{e.displayName}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-2">{verified.length > 0 ? <VerifiedBadge label="Verified qualifications" /> : <Badge tone="neutral">Qualifications not yet verified</Badge>}<ProviderBadge provider={e.provider} /></div></div>
-          <div className="flex gap-6 text-center sm:flex-col sm:gap-2"><div><p className="font-display text-3xl">{e.reviewCount ? e.ratingAvg.toFixed(1) : '—'}</p><p className="text-xs text-white/70">{e.reviewCount} review{e.reviewCount === 1 ? '' : 's'}</p></div></div>
+          <div className="flex gap-6 text-center sm:flex-col sm:gap-2"><div><p className="font-display text-3xl">{e.reviewCount ? e.ratingAvg.toFixed(1) : 'Not rated'}</p><p className="text-xs text-white/70">{e.reviewCount} review{e.reviewCount === 1 ? '' : 's'}</p></div></div>
         </div>
-        <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-white/15 pt-5 text-center"><div><dt className="text-xs text-white/70">Experience</dt><dd className="font-medium">{e.yearsExperience} yrs</dd></div><div><dt className="text-xs text-white/70">Jobs completed</dt><dd className="font-medium">{e.completedJobs}</dd></div><div><dt className="text-xs text-white/70">Area</dt><dd className="font-medium">{e.areasCovered?.[0] ?? '—'}</dd></div></dl>
+        <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-white/15 pt-5 text-center"><div><dt className="text-xs text-white/70">Experience</dt><dd className="font-medium">{e.yearsExperience} yrs</dd></div><div><dt className="text-xs text-white/70">Jobs completed</dt><dd className="font-medium">{e.completedJobs}</dd></div><div><dt className="text-xs text-white/70">Area</dt><dd className="font-medium">{e.areasCovered?.[0] ?? 'Not listed'}</dd></div></dl>
       </header>
 
       <div className="mt-6 grid gap-8 md:grid-cols-[1fr_20rem]">
         <div className="space-y-8">
-          <section><h2 className="mb-2 font-display text-xl">About</h2><p className="whitespace-pre-line leading-relaxed text-thor-slate">{e.bio}</p></section>
+          <section><h2 className="mb-2 font-display text-xl">About</h2><p className="whitespace-pre-line leading-relaxed text-thor-slate">{e.bio || 'This engineer has not added a biography.'}</p></section>
           <section><h2 className="mb-3 font-display text-xl">Specialisations</h2><div className="flex flex-wrap gap-2">{e.specialisations.map(s => <Badge key={s} tone="info"><Wrench className="size-3" />{SPECIALISATIONS.find(x => x.id === s)?.label ?? s}</Badge>)}</div></section>
           <section>
             <h2 className="mb-3 font-display text-xl">Reviews</h2>
@@ -48,7 +48,7 @@ export default function EngineerProfile() {
             {verified.length > 0 && <><p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-ok"><BadgeCheck className="size-4" />Verified by Thor Computer</p><ul className="space-y-1.5">{verified.map(v => <li key={v.name} className="flex items-start gap-2 text-sm"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" /><span><b>{v.name}</b>{v.issuer && <span className="text-thor-text"> · {v.issuer}</span>}</span></li>)}</ul></>}
             {e.selfReportedCerts && <><p className="mb-1 mt-4 text-xs font-medium uppercase tracking-wide text-thor-text">Self-reported, not verified</p><p className="text-sm text-thor-slate">{e.selfReportedCerts}</p></>}
             {!verified.length && !e.selfReportedCerts && <p className="text-sm text-thor-text">None listed yet.</p>}</section>
-          <section><h2 className="mb-2 font-display text-lg">Service</h2><ul className="space-y-1.5 text-sm text-thor-slate"><li className="flex gap-2"><MapPin className="size-4 shrink-0 text-thor-blue" />{e.areasCovered?.join(', ')}</li><li className="flex gap-2"><Briefcase className="size-4 shrink-0 text-thor-blue" />{e.workingArrangements?.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(', ')}</li></ul>
+          <section><h2 className="mb-2 font-display text-lg">Service</h2><ul className="space-y-1.5 text-sm text-thor-slate"><li className="flex gap-2"><MapPin className="size-4 shrink-0 text-thor-blue" />{e.areasCovered?.join(', ') || 'Service area not listed'}</li><li className="flex gap-2"><Briefcase className="size-4 shrink-0 text-thor-blue" />{e.workingArrangements?.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(', ') || 'Service methods not listed'}</li></ul>
             {e.typicalPricing && <p className="mt-3 rounded-xl bg-paper p-3 text-sm"><Star className="mr-1.5 inline size-4 text-thor-orange" />{e.typicalPricing}</p>}</section>
           <ProviderTerms provider={e.provider} />
         </aside>

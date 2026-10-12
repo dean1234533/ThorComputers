@@ -25,7 +25,7 @@ export default function NotificationPrompt() {
 
   const enable = async () => {
     setBusy(true)
-    try { const r = await enablePush(user!.uid); toast(r === 'granted' ? 'ok' : 'info', r === 'granted' ? 'Notifications enabled.' : 'Notifications are off. You can change this in Settings.') }
+    try { const r = await enablePush(user!.uid); toast(r === 'granted' ? 'ok' : 'info', r === 'granted' ? 'Notifications are now on.' : 'Notifications are off. You can change this in Settings.') }
     catch { toast('bad', 'Could not enable notifications. Try again from Settings.') }
     finally { setBusy(false); setShow(false) }
   }
@@ -34,8 +34,8 @@ export default function NotificationPrompt() {
       <motion.aside role="dialog" aria-labelledby="np-t" initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-3xl bg-white p-5 shadow-2xl md:bottom-6 md:left-auto md:right-6">
         <div className="flex gap-3.5"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-thor-orange/20"><BellRing className="size-6 text-thor-orange-600" /></span>
           <div><h2 id="np-t" className="font-display text-lg font-semibold">Never Miss a Repair Update</h2>
-            <p className="mt-1 text-sm text-thor-text">Enable notifications to receive new quotations, engineer messages and appointment reminders. Alerts never show your personal details on the lock screen.</p></div></div>
-        <div className="mt-4 flex gap-3"><Button onClick={enable} loading={busy} className="flex-1">Enable Notifications</Button><Button variant="ghost" onClick={() => { dismissPush(); setShow(false) }}>Maybe Later</Button></div>
+            <p className="mt-1 text-sm text-thor-text">Turn on notifications for new quotes, messages and appointment reminders. Alerts never show your personal details on the lock screen.</p></div></div>
+        <div className="mt-4 flex gap-3"><Button onClick={enable} loading={busy} className="flex-1">Turn on notifications</Button><Button variant="ghost" onClick={() => { dismissPush(); setShow(false) }}>Maybe later</Button></div>
       </motion.aside>)}</AnimatePresence>
   )
 }
