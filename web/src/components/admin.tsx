@@ -18,7 +18,7 @@ export function RangePicker({ value, onChange }: { value: Range; onChange: (r: R
 }
 
 export function Stat({ label, value, hint, tone }: { label: string; value: ReactNode; hint?: string; tone?: 'ok' | 'warn' | 'bad' }) {
-  return <div className="surface p-4"><p className={cx('font-display text-2xl', tone === 'ok' && 'text-ok', tone === 'warn' && 'text-warn', tone === 'bad' && 'text-bad')}>{value ?? <Skeleton className="h-8 w-16" />}</p><p className="text-sm text-thor-text">{label}</p>{hint && <p className="mt-1 text-[11px] text-thor-text/80">{hint}</p>}</div>
+  return <div className="surface p-4"><div className={cx('font-display text-2xl', tone === 'ok' && 'text-ok', tone === 'warn' && 'text-warn', tone === 'bad' && 'text-bad')}>{value ?? <Skeleton className="h-8 w-16" />}</div><p className="text-sm text-thor-text">{label}</p>{hint && <p className="mt-1 text-[11px] text-thor-text/80">{hint}</p>}</div>
 }
 
 /** Dependency-free bar chart; an equivalent table is rendered for screen readers. */

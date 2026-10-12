@@ -1,5 +1,29 @@
 # Test status (honest record)
 
+## Marketplace upgrade run (2026-10-12, Linux, Node 22, JDK 21, PHP 8.3, headless Chromium)
+All against the Firebase emulators on `demo-thor`. Stripe and the Meta Graph API were replaced by local test doubles (`tests/marketplace-smoke.mjs`); webhooks were genuinely signed and verified by the real handlers. **No live or test-mode Stripe account, Meta app, Gemini key or WordPress site was used.**
+| Suite | Result | Covers |
+|---|---|---|
+| `npm run test:functions` | 24/24 | Incl. commission £100→£15/£85, £200→£30/£170, £500→£75/£425, £750→£112.50, half-up rounding, deposit+balance+extra never double-charge, payment policies, THOR refs, new transitions, Meta field mapping/normalising/consent, routing, Meta signature check, token encryption |
+| `npm run test:rules` | 36/36 | Incl. payments/transactions/commission (parties + finance only, no client writes), support never sees finance, Meta tokens unreadable by everyone, leads for lead managers only, tickets/disputes parties only, held jobs hidden from engineers, support cannot read addresses |
+| `npm run test:smoke` | 51/51 | Original journey: unchanged behaviour after the upgrade |
+| `npm run test:marketplace` (new) | 34/34 | Roles (only super admin changes commission), Stripe Express onboarding + Connect webhook, quote gating on payouts, 15% fixed on quote, awaiting-payment gating, Checkout with application fee + destination, payment confirmed only by webhook, replay idempotency, amount-mismatch rejected, failed payment, revision + balance (£18 total commission on £120), dispute → refund with reverse transfer, cumulative refund sync, finance report, Meta verify handshake, unsigned webhook refused, lead import/dedupe, incomplete lead pending, secure confirmation link → job with campaign attribution, engineer area notification, lead status sync, auto mode with account creation, no auto-publish without consent, routing rule, lead reject audit, assistant limits, support tickets |
+| `npm run test:smoke:mfa` | 7/7 (3 modes) | unchanged |
+| `npm run test:wp` | 12/12 | Contact Form 7 path after the intake refactor. The new `[thor_repair_form]` handler is linted only (needs real WordPress) |
+| `npm run test:browser` | 86/86 | Every route incl. Leads, Marketing (all tabs), Finance, Disputes, Support, Payouts |
+| `npm run test:web`, `npm run lint:php` | clean | |
+
+Bugs found and fixed during this run: engineer service radius was never copied to public profiles (matching always used 15 mi); audit entries with an optional field crashed admin lead actions (`undefined` in Firestore); invalid DOM nesting on Finance stat tiles; the notification prompt covered the request wizard's Continue button on phones.
+
+**Sandbox note:** the Firebase CLI sends its localhost emulator calls through `HTTPS_PROXY` and ignores `NO_PROXY`; in the sandbox used for this run that proxy blocks localhost, so the suites were run with proxy variables removed from that process only. On a normal machine `npm test` needs nothing special.
+
+### Not verified (needs real accounts/devices)
+Stripe test/live mode (Checkout page, Express onboarding UI, real webhooks, payouts, receipts, disputes), Meta OAuth/App Review/Business Verification/real Lead Ads webhooks/Marketing API campaign edits (incl. CBO vs ad-set budgets), Gemini responses and JSON adherence, Firestore composite indexes (emulator does not enforce; 39 new ones added), email delivery of the new templates, push on devices, WordPress rendering of the new shortcodes/form, scheduled jobs (`metaReconcile`, `metaHourlySync`, `dailyFollowUps`) firing on schedule.
+
+---
+
+## Previous run
+
 Last run: 2026-10-11, macOS arm64, Node 24, JDK 21, PHP 8.3.32 (static build), headless Chrome. `npm test` exited 0. **Everything below ran against the Firebase emulators on the fake project `demo-thor`.** Emulator results are not evidence about production, real devices or real third-party services. Commands: `docs/LOCAL_DEVELOPMENT.md`.
 
 ## Verified (actually executed, passing)

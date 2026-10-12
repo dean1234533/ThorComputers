@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { useLocation } from 'react-router-dom'
 import { Download, Smartphone, Bell, CalendarCheck, FileText } from 'lucide-react'
 import { useInstall, dismissedRecently } from '@/lib/pwa'
 import { Button, Logo, Sheet } from './ui'
@@ -22,6 +23,7 @@ export default function InstallBanner() {
   const { installable, ios, install, dismiss } = useInstall()
   const [show, setShow] = useState(false)
   const [steps, setSteps] = useState(false)
+  const busyFlow = useLocation().pathname.startsWith('/customer/new-request')
 
   useEffect(() => {
     if (!installable || dismissedRecently()) return
@@ -32,6 +34,7 @@ export default function InstallBanner() {
   const close = () => { dismiss(); setShow(false) }
   const go = async () => { if (ios) { setSteps(true); return } const r = await install(); if (r !== 'unavailable') setShow(false) }
 
+  if (busyFlow) return null   // never cover the request wizard's Continue button on phones
   return (
     <>
       <AnimatePresence>{show && !steps && (

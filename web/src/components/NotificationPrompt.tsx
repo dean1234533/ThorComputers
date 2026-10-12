@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { useLocation } from 'react-router-dom'
 import { BellRing } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { dismissedRecently, useInstall } from '@/lib/pwa'
@@ -13,6 +14,7 @@ export default function NotificationPrompt() {
   const toast = useToast()
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
+  const busyFlow = useLocation().pathname.startsWith('/customer/new-request')
 
   useEffect(() => {
     if (!user || permission() !== 'default' || pushDismissedRecently()) return
@@ -29,6 +31,7 @@ export default function NotificationPrompt() {
     catch { toast('bad', 'Could not enable notifications. Try again from Settings.') }
     finally { setBusy(false); setShow(false) }
   }
+  if (busyFlow) return null   // never cover the request wizard's Continue button on phones
   return (
     <AnimatePresence>{show && (
       <motion.aside role="dialog" aria-labelledby="np-t" initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-3 bottom-24 z-50 mx-auto max-w-md rounded-3xl bg-white p-5 shadow-2xl md:bottom-6 md:left-auto md:right-6">
