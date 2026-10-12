@@ -36,6 +36,17 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
+    // Engineer progress photos: uploaded by the selected engineer once booked; readable by the customer, that engineer and job staff.
+    match /jobs/{jobId}/progress/{file} {
+      allow create: if resource == null && signedIn() && request.auth.token.suspended != true && isImage()
+        && firestore.get(/databases/(default)/documents/repairRequests/$(jobId)).data.selectedEngineerId == request.auth.uid;
+      allow read: if signedIn() && (
+        firestore.get(/databases/(default)/documents/repairRequests/$(jobId)).data.customerId == request.auth.uid
+        || firestore.get(/databases/(default)/documents/repairRequests/$(jobId)).data.selectedEngineerId == request.auth.uid
+        || (isAdmin() && ('jobs.view' in request.auth.token.perms || 'jobs.manage' in request.auth.token.perms)));
+      allow update, delete: if false;
+    }
+
     match /{allPaths=**} { allow read, write: if false; }
   }
 }

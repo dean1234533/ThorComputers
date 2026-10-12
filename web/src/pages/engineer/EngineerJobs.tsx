@@ -11,8 +11,9 @@ import { StorageImg } from '@/components/StorageImg'
 import { Quote } from '@/components/QuoteCompare'
 import { DEVICE_TYPES, SERVICE_METHODS, gbp, JobStatus, ENGINEER_NEXT, JOB_STATUS_LABEL, commissionPence, JobPayment } from '@/types/domain'
 import ReviewSheet from '@/components/ReviewSheet'
+import JobTimeline, { ProgressForm } from '@/components/JobTimeline'
 
-interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; summary: string; description: string; issues: string[]; urgency: 'flexible' | 'soon' | 'urgent'; serviceMethods: string[]; location: { area: string; lat: number; lng: number }; photoPaths: string[]; quoteCount: number; createdAt?: { toDate(): Date }; selectedEngineerId?: string; acceptedQuoteId?: string; customerId: string; agreedTotalPence?: number; agreedMethod?: string; payment?: JobPayment; commissionBps?: number; pendingRevision?: { additionalPence: number; reason: string; status: string } | null }
+interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; summary: string; description: string; issues: string[]; urgency: 'flexible' | 'soon' | 'urgent'; serviceMethods: string[]; location: { area: string; lat: number; lng: number }; photoPaths: string[]; quoteCount: number; createdAt?: { toDate(): Date }; selectedEngineerId?: string; acceptedQuoteId?: string; customerId: string; agreedTotalPence?: number; agreedMethod?: string; payment?: JobPayment; commissionBps?: number; pendingRevision?: { additionalPence: number; reason: string; status: string } | null; statusHistory?: { status: string; at: { toDate(): Date } }[]; messageCount?: number; lastMessageAt?: { toDate(): Date } }
 const age = (d?: Date) => { if (!d) return ''; const h = (Date.now() - d.getTime()) / 3600_000; return h < 1 ? 'Just now' : h < 24 ? `${Math.floor(h)}h ago` : `${Math.floor(h / 24)}d ago` }
 const devLabel = (t: string) => DEVICE_TYPES.find(d => d.id === t)?.label ?? t
 
@@ -140,6 +141,8 @@ export function MyJobDetail() {
           {priv.data?.accessNotes && <div className="flex justify-between gap-4"><dt className="text-thor-text">Access</dt><dd className="text-right">{priv.data.accessNotes}</dd></div>}
           {priv.data?.serialNumber && <div className="flex justify-between"><dt className="text-thor-text">Serial</dt><dd>{priv.data.serialNumber}</dd></div>}</dl>
         <p className="mt-2 text-xs text-thor-text">Customer details are for this job only. Please keep communication within Thor Computer.</p></Section>
+      {['appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts', 'completed'].includes(job.status) && <Section title="Progress updates for the customer"><ProgressForm jobId={job.id} /></Section>}
+      <Section title="Timeline"><JobTimeline jobId={job.id} job={job} audience="engineer" /></Section>
       {job.payment?.required && <p className="mb-4 rounded-xl bg-paper p-3 text-sm">Customer payment: <b>{job.payment.status.replace('_', ' ')}</b> · {gbp(job.payment.paidPence ?? 0)} of {gbp(job.agreedTotalPence ?? 0)} received{job.status === 'awaiting_payment' ? '. The customer can book once payment is confirmed.' : '.'}</p>}
       {['engineer_selected', 'awaiting_payment', 'appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts'].includes(job.status) && <Section title="Additional work">
         {job.pendingRevision?.status === 'pending' ? <p className="rounded-xl bg-warn/10 p-3 text-sm">Waiting for the customer to approve an extra {gbp(job.pendingRevision.additionalPence)}.</p> :

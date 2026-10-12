@@ -6,7 +6,7 @@ import { useDoc, useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { Badge, Button, Input, PageHeader, Section, Select, Textarea, useToast, EmptyState } from '@/components/ui'
 import { SPECIALISATIONS, ADMIN_DEFAULT_PERMISSIONS } from '@/types/domain'
-import { AssistantSection, MarketplaceSection, PaymentsSection } from './SettingsSections'
+import { AssistantSection, MarketplaceSection, PaymentsSection, SlaSection } from './SettingsSections'
 
 interface PS { support?: { email: string; phone: string; hours: string }; booking?: { reminderHours: number[]; leadMinutes: number; cancelNoticeHours: number }; coverage?: { areas: string[]; note: string }; directServicePolicy?: { warranty: string; terms: string }; marketplaceDisclaimer?: string; categories?: { id: string; label: string; enabled: boolean }[] }
 
@@ -30,7 +30,7 @@ export default function AdminSettings() {
       <Section title="Policies"><p className="mb-3 text-sm text-thor-text">Thor Computer’s own warranty applies only to work done by Thor Computer engineers. Independent engineers set their own warranty in each quotation.</p>
         <Textarea label="Warranty for Thor Computer’s direct services" value={s.warranty} onChange={e => setS({ ...s, warranty: e.target.value })} /><div className="mt-4"><Textarea label="Direct service terms" value={s.terms} onChange={e => setS({ ...s, terms: e.target.value })} /></div><div className="mt-4"><Textarea label="Marketplace disclaimer (shown with independent quotes)" value={s.disclaimer} onChange={e => setS({ ...s, disclaimer: e.target.value })} /></div></Section>
       <Button onClick={save} loading={busy} size="lg" className="w-full">Save settings</Button>
-      <MarketplaceSection /><PaymentsSection /><AssistantSection />
+      <MarketplaceSection /><SlaSection /><PaymentsSection /><AssistantSection />
       <Section title="WordPress integration"><div className="flex items-center gap-3 surface p-5"><Plug className="size-6 text-thor-blue" /><div className="flex-1"><p className="font-medium">Enquiry intake</p><p className="text-sm text-thor-text">{last ? `Last enquiry received ${last.toLocaleString('en-GB')}` : 'No enquiries received from thorcomputer.com yet.'}</p></div><Badge tone={last ? 'ok' : 'neutral'}>{last ? 'Receiving' : 'Waiting'}</Badge></div></Section>
       {superAdmin && <Section title="Admin team"><ul className="divide-y divide-ink/8 surface px-5">{admins.data.map(a => <AdminRow key={a.id} id={a.id} name={a.fullName} email={a.email} level={a.adminLevel ?? 'admin'} />)}</ul>
         <PromoteForm /></Section>}

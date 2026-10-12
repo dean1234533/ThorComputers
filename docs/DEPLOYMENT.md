@@ -110,7 +110,8 @@ Create a key in Google AI Studio (restrict it to the Generative Language API) �
 2. Set every new secret (§2, placeholders are fine), then deploy functions and the web app.
 3. **Existing admins keep their old permission set** (claims are not changed by a deploy). A super admin re-applies each admin's level in **Platform Settings → Admin team** to grant the new permissions (finance, marketing, leads, disputes, support, assistant). For the first super admin run `node scripts-grant-super-admin.mjs you@thorcomputer.com` again (it now grants all permissions), then sign out and in.
 4. Existing jobs keep their `THR-` references; new jobs get `THOR-YYYY-NNNNNN`. Existing jobs have no `payment` block and continue without payment collection.
-5. Update the WordPress plugin to 1.1.0 (new shortcodes and `[thor_repair_form]`; existing `[thor_app_download]` and Contact Form 7 intake unchanged).
+5. Contact list: after deploying functions, fill the summaries for existing customers once: `npm --prefix functions run build && GOOGLE_APPLICATION_CREDENTIALS=… node scripts/backfill-contact-summaries.mjs` (safe to re-run). Deploy `storage` rules too (progress photos).
+6. Update the WordPress plugin to 1.1.0 (new shortcodes and `[thor_repair_form]`; existing `[thor_app_download]` and Contact Form 7 intake unchanged).
 
 ## 11. Post-deploy smoke test
 Register customer → verify email → post request → register engineer, upload credential, set up payouts → approve as admin → quote → accept → pay (Stripe test card) → book → message → complete → review. Then a Meta test lead (Lead Ads Testing Tool) through to a quote. Then `docs/TESTING.md`.

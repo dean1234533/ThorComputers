@@ -85,6 +85,14 @@ export const api = {
   adminSearchUsers: fn<{ q: string; role?: 'customer' | 'engineer' | 'admin' }, { users: { id: string; fullName: string; email: string; role: string; status: string; engineerStatus: string | null; createdAt: number | null }[] }>('adminSearchUsers'),
   adminDeleteAccount: fn<{ userId: string; confirm: 'DELETE'; reason: string }>('adminDeleteAccount'),
   requestAccountDeletion: fn<{ reason?: string }>('requestAccountDeletion'),
+  // contacts & progress
+  updateContact: fn<{ userId: string; tags?: string[]; assignedTo?: string | null }>('updateContact'),
+  addContactNote: fn<{ userId: string; text: string; jobId?: string }, { noteId: string }>('addContactNote'),
+  editContactNote: fn<{ userId: string; noteId: string; text: string }>('editContactNote'),
+  upsertContactTask: fn<{ taskId?: string; userId: string; title: string; dueAt: string; ownerId: string; status?: 'open' | 'done' }, { taskId: string }>('upsertContactTask'),
+  exportContacts: fn<{ status?: string; source?: string; tag?: string; assignedTo?: string }, { rows: Record<string, unknown>[] }>('exportContacts'),
+  postProgressUpdate: fn<{ jobId: string; text: string; photoPaths?: string[]; percent?: number }, { updateId: string }>('postProgressUpdate'),
+  saveSlaSettings: fn<{ hours: Record<string, number> }>('saveSlaSettings'),
 }
 
 export interface AssistantDraft { deviceType?: string; manufacturer?: string; model?: string; problem?: string; postcode?: string; serviceMethod?: string; urgency?: string }

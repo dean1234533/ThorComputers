@@ -252,6 +252,7 @@ export const changeJobStatus = callable(z.object({ jobId: z.string(), to: z.enum
     const actor = c.role === 'admin' ? (requirePerm(req, 'jobs.manage'), 'admin') : j.customerId === c.uid ? 'customer' : j.selectedEngineerId === c.uid ? 'engineer' : null
     if (!actor) throw new HttpsError('permission-denied', 'You are not part of this job.')
     if (from === d.to) return { noop: true as const }
+    if (actor === 'admin' && (d.note ?? '').trim().length < 5) throw new HttpsError('invalid-argument', 'Give a reason for this change (at least 5 characters).')
     if (!canTransition(actor, from, d.to)) throw new HttpsError('failed-precondition', `${actor} cannot move a job from ${from} to ${d.to}.`)
     if (actor === 'customer' && d.to === 'closed' && j.payment?.required && (j.payment.paidPence ?? 0) < (j.agreedTotalPence ?? 0)) throw new HttpsError('failed-precondition', 'Please pay the outstanding balance before closing this repair.')
     if (actor === 'customer' && d.to === 'disputed' && (d.note ?? '').trim().length < 10) throw new HttpsError('invalid-argument', 'Please describe the problem (at least 10 characters).')

@@ -1,5 +1,8 @@
 # Test status (honest record)
 
+## Contact list and work-progress run (2026-10-12)
+`npm test` exit 0: functions 24/24, rules 39/39 (incl. storage), smoke 51/51, marketplace 40/40 (new section 7: trigger-maintained contact summaries with money kept off the customer-readable user document, staff notes/tags hidden from customer and engineer, author-only note edits, audited export with support limited to basic fields, overdue task count, engineer progress update + customer notification + access control, invalid board moves and missing reasons refused, SLA settings permission), MFA 7/7, WordPress 12/12, browser 88/88 (incl. /admin/contacts and /admin/progress), build and PHP lint clean. `scripts/backfill-contact-summaries.mjs` run against seeded emulator data. Not verified: hourly overdue-task reminder schedule firing, progress photo upload from a real phone, composite indexes in production.
+
 ## Marketplace upgrade run (2026-10-12, Linux, Node 22, JDK 21, PHP 8.3, headless Chromium)
 All against the Firebase emulators on `demo-thor`. Stripe and the Meta Graph API were replaced by local test doubles (`tests/marketplace-smoke.mjs`); webhooks were genuinely signed and verified by the real handlers. **No live or test-mode Stripe account, Meta app, Gemini key or WordPress site was used.**
 | Suite | Result | Covers |

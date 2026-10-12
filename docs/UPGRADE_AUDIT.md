@@ -60,8 +60,21 @@ Legend: **Existed** = already in the app before this upgrade · **Extended** = e
 | 31 | Transaction rules (integer pence, revisions, refunds, disputes) | New | `proposeQuoteRevision`/`respondQuoteRevision`, `resolveDispute`, auto-refund on cancellation (minus configured charge) |
 | 32 | Automation and idempotency | New | Event-id/lead-id keyed documents, dead-letter + admin retry |
 
+## 2a. Customer contact list and work-progress tracking (follow-up)
+| Requirement | Status | Where |
+|---|---|---|
+| Contact list with source, repairs, last activity, total paid (finance only), consent, status, tags, assignee; filters; search incl. THOR reference | New | `/admin/contacts`, summaries kept by `onRepairRequestWrittenContact` on `users.contact`; money in `contactFinance` (finance.view). Filters run on the latest 1,000 customers; search and export cover everyone |
+| Audited CSV export, support limited to name/email/phone/status | New | `exportContacts` (server-side, audit entry per export) |
+| Contact record: repairs (with timeline), quotes, appointments, payments, disputes, tickets, reviews, Meta lead | New | `/admin/contacts/:id` |
+| Staff notes (author-only edits, never visible to customer/engineer), tags, assigned staff, follow-up tasks with overdue reminders | New | `users/{uid}/contactNotes`, `contactMeta`, `contactTasks`, `contactTaskReminders` (hourly), overdue tile on Overview. Tags/assignment are deliberately NOT on the user document because the customer can read it |
+| Work in progress board with SLA flags and audited moves along allowed transitions only | New | `/admin/progress`; admin status changes now require a reason; target hours in Platform Settings |
+| Per-job timeline (status, quotes, payments, appointment, message COUNT only, staff notes) | New | `JobTimeline` (admin / engineer / customer views); message count kept by `onMessageCreated` |
+| Engineer progress updates with photos; customer notified (lock-screen safe) | New | `postProgressUpdate`, `repairRequests/{id}/progress`, Storage `jobs/{jobId}/progress/` |
+| Customer marketing-consent choice | New | Settings → Notifications (`privacy.marketingEmails`, customer-controlled) |
+| Existing customers | Backfill | `scripts/backfill-contact-summaries.mjs` (DEPLOYMENT §10) |
+
 ## 3. Collections added
-`payments`, `transactions`, `commissionRecords`, `commissionHistory`, `refunds`, `paymentDisputes`, `payouts`, `stripeConnectedAccounts`, `stripeEvents`, `disputes`, `supportTickets/{id}/messages`, `deletionRequests`, `metaConnections`, `metaSecrets` (encrypted, no client access), `metaOAuthStates`, `metaAdAccounts`, `metaCampaigns`, `metaInsightsDaily`, `metaLeadForms`, `metaLeads`, `metaLeadRaw`, `metaWebhookEvents`, `leadMappings`, `leadConversionEvents`, `integrationHealth`, `chatbotStats`, `chatbotUsage`, `counters`. Platform settings live in `platformSettings/public` (non-secret rules incl. commission rate), `/marketing` and `/chatbot`.
+`payments`, `transactions`, `commissionRecords`, `commissionHistory`, `refunds`, `paymentDisputes`, `payouts`, `stripeConnectedAccounts`, `stripeEvents`, `disputes`, `supportTickets/{id}/messages`, `deletionRequests`, `metaConnections`, `metaSecrets` (encrypted, no client access), `metaOAuthStates`, `metaAdAccounts`, `metaCampaigns`, `metaInsightsDaily`, `metaLeadForms`, `metaLeads`, `metaLeadRaw`, `metaWebhookEvents`, `leadMappings`, `leadConversionEvents`, `integrationHealth`, `chatbotStats`, `chatbotUsage`, `counters`, `contactMeta`, `contactFinance`, `contactTasks`, `users/{uid}/contactNotes`, `repairRequests/{id}/progress`. Platform settings live in `platformSettings/public` (non-secret rules incl. commission rate), `/marketing` and `/chatbot`.
 
 Relationships: lead → (`jobId`) job → (`attribution.leadId/campaignId`) → quote (`jobId`, `engineerId`) → payment (`jobId`, `quoteId` via job) → transaction (`paymentId`, `attribution`) → commission record (`transactionId` = Stripe PaymentIntent id). Reviews are keyed `jobId_direction` and require a completed job.
 

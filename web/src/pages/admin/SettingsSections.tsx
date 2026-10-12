@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { Badge, Button, Input, Section, Select, Textarea, useToast } from '@/components/ui'
+import { DEFAULT_SLA_HOURS } from './ProgressBoard'
 import { DEVICE_TYPES, PAYMENT_POLICY_LABEL, PaymentPolicy, gbp, commissionPence } from '@/types/domain'
 
 interface Pub {
@@ -11,6 +12,17 @@ interface Pub {
   payments?: { enabled: boolean; commissionBps: number; policy: PaymentPolicy; depositPercent: number; refundApplicationFee: boolean; cancellationFeePence: number; refundPolicyText: string; methods: string[] }
 }
 const Toggle = ({ label, on, set }: { label: string; on: boolean; set: (v: boolean) => void }) => <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-thor-blue" checked={on} onChange={e => set(e.target.checked)} />{label}</label>
+
+export function SlaSection() {
+  const toast = useToast(); const d = useDoc<{ sla?: { hours: Record<string, number> } }>('platformSettings/public')
+  const [h, setH] = useState<Record<string, number> | null>(null); const [busy, setBusy] = useState(false)
+  useEffect(() => { if (!d.loading) setH({ ...DEFAULT_SLA_HOURS, ...d.data?.sla?.hours }) }, [d.loading, d.data])
+  if (!h) return null
+  const save = async () => { setBusy(true); try { await api.saveSlaSettings({ hours: h }); toast('ok', 'Target times saved.') } catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false) } }
+  return <Section title="Work-in-progress target times (hours per stage)"><p className="mb-3 text-sm text-thor-text">Jobs that stay in a stage longer than this are flagged red on the Work in progress board.</p>
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">{Object.keys(DEFAULT_SLA_HOURS).map(k => <Input key={k} label={k.replace(/_/g, ' ')} type="number" min={1} value={h[k]} onChange={e => setH({ ...h, [k]: Number(e.target.value) })} />)}</div>
+    <Button className="mt-3" onClick={save} loading={busy}>Save target times</Button></Section>
+}
 
 export function MarketplaceSection() {
   const toast = useToast(); const d = useDoc<Pub>('platformSettings/public')

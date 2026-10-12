@@ -145,7 +145,7 @@ await step('unapproved engineer can reach onboarding but sees no available jobs'
 console.log('\nAdmin (super admin) and support admin')
 const adm = await newSession('superadmin', false)
 await step('super admin signs in and lands on /admin', async () => { await login(adm, 'superadmin@demo.test'); ok(new URL(adm.page.url()).pathname === '/admin', adm.page.url()) })
-for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/admin/leads', '/admin/marketing', '/admin/marketing?tab=campaigns', '/admin/marketing?tab=roi', '/admin/marketing?tab=forms', '/admin/marketing?tab=settings', '/admin/marketing?tab=webhooks', '/admin/finance', '/admin/disputes', '/admin/support', '/notifications', '/settings'])
+for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/admin/leads', '/admin/marketing', '/admin/marketing?tab=campaigns', '/admin/marketing?tab=roi', '/admin/marketing?tab=forms', '/admin/marketing?tab=settings', '/admin/marketing?tab=webhooks', '/admin/finance', '/admin/disputes', '/admin/support', '/admin/contacts', '/admin/progress', '/notifications', '/settings'])
   await step(`super admin ${p}`, () => visit(adm, p))
 await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
   await visit(adm, '/admin')

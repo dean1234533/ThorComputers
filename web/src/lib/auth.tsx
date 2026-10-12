@@ -7,7 +7,7 @@ import type { AdminPermission, Role } from '@/types/domain'
 
 export interface Profile {
   role: Role; email: string; fullName: string; phone: string; postcode: string; photoURL: string | null; status: string
-  notificationPrefs?: { push: Record<string, boolean>; email: Record<string, boolean> }; engineerStatus?: string; createdAt?: { toDate(): Date }
+  notificationPrefs?: { push: Record<string, boolean>; email: Record<string, boolean> }; privacy?: { showCityOnProfile?: boolean; marketingEmails?: boolean }; engineerStatus?: string; createdAt?: { toDate(): Date }
 }
 interface Ctx {
   user: User | null; profile: Profile | null; role: Role | null; perms: AdminPermission[]; approved: boolean; specs: string[]

@@ -1,4 +1,4 @@
-import { KeyRound, Megaphone, Inbox, Wallet, Gavel, LifeBuoy, PoundSterling, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
+import { KeyRound, Contact, KanbanSquare, Megaphone, Inbox, Wallet, Gavel, LifeBuoy, PoundSterling, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
 import type { AdminPermission, Role } from '@/types/domain'
 
 export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications'; perm?: AdminPermission | AdminPermission[] }
@@ -34,6 +34,8 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/admin/jobs', label: 'Repair Requests', mobileLabel: 'Requests', icon: ClipboardList, primary: true, perm: ['jobs.view', 'jobs.manage'] },
     { to: '/admin/leads', label: 'Incoming Leads', mobileLabel: 'Leads', icon: Inbox, primary: true, perm: 'leads.manage' },
     { to: '/admin/support', label: 'Support', icon: LifeBuoy, primary: true, perm: 'support.handle' },
+    { to: '/admin/progress', label: 'Work in progress', mobileLabel: 'Progress', icon: KanbanSquare, perm: ['jobs.view', 'jobs.manage'] },
+    { to: '/admin/contacts', label: 'Contacts', icon: Contact, perm: 'customers.manage' },
     { to: '/admin/approvals', label: 'Approvals', icon: ShieldCheck, perm: 'engineers.review' },
     { to: '/admin/marketing', label: 'Marketing & Lead Generation', mobileLabel: 'Marketing', icon: Megaphone, perm: 'marketing.view' },
     { to: '/admin/finance', label: 'Finance', icon: PoundSterling, perm: 'finance.view' },

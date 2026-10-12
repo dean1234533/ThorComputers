@@ -363,6 +363,57 @@ await step('support ticket: customer opens, support replies, other customers can
   eq((await A.db.doc(`supportTickets/${ticketId}`).get()).data().status, 'pending')
 })
 
+section('7. Contact list and work progress')
+await step('contact summary is kept by triggers: repairs counted, money only in the finance-only document', async () => {
+  const u = await until(async () => { const x = (await A.db.doc(`users/${customer.uid}`).get()).data(); return x?.contact?.totalRepairs >= 3 && x }, 'contact summary')
+  ok(u.contact.activeRepairs >= 1, 'active repairs not counted'); eq(u.contact.source, 'app'); ok(!('totalPaidPence' in u.contact), 'money leaked onto the user document')
+  eq((await A.db.doc(`contactFinance/${customer.uid}`).get()).data().totalPaidPence, 10000)   // £120 paid − £20 refunded
+})
+let noteId
+await step('staff note and tags are hidden from the customer; only the author edits a note', async () => {
+  noteId = (await support.call('addContactNote', { userId: customer.uid, text: 'Prefers a call after 5pm.' })).noteId
+  await support.call('updateContact', { userId: customer.uid, tags: ['VIP', 'business'], assignedTo: admin.uid })
+  await denied(getDoc(doc(customer.db, `users/${customer.uid}/contactNotes/${noteId}`))); await denied(getDoc(doc(engineer.db, `users/${customer.uid}/contactNotes/${noteId}`)))
+  await denied(getDoc(doc(customer.db, `contactMeta/${customer.uid}`)))
+  ok(!('contactTags' in (await getDoc(doc(customer.db, `users/${customer.uid}`))).data()), 'tags on the customer-readable user document')
+  eq(JSON.stringify((await A.db.doc(`contactMeta/${customer.uid}`).get()).data().tags), JSON.stringify(['vip', 'business']))
+  await denied(admin.call('editContactNote', { userId: customer.uid, noteId, text: 'changed' }), 'permission-denied', 'author')
+  await denied(customer.call('addContactNote', { userId: customer.uid, text: 'hi' }), 'permission-denied')
+})
+await step('export is audited; support gets basic fields only, finance admins get totals', async () => {
+  const s = (await support.call('exportContacts', {})).rows.find(r => r.email === customer.addr); ok(s && !('totalPaidGBP' in s) && !('postcode' in s), JSON.stringify(s))
+  const f = (await superAdmin.call('exportContacts', { tag: 'vip' })).rows; eq(f.length, 1); eq(f[0].totalPaidGBP, '100.00')
+  ok((await A.db.collection('auditLogs').where('action', '==', 'contact.export').get()).size >= 2)
+})
+await step('overdue follow-up task is counted on the dashboard', async () => {
+  await denied(support.call('upsertContactTask', { userId: customer.uid, title: 'Call back', dueAt: new Date().toISOString(), ownerId: customer.uid }), 'invalid-argument')
+  await support.call('upsertContactTask', { userId: customer.uid, title: 'Call back about the battery', dueAt: new Date(Date.now() - 3600_000).toISOString(), ownerId: support.uid })
+  ok((await superAdmin.call('adminStats', { days: 7 })).totals.overdueTasks >= 1)
+})
+let progJob
+await step('engineer posts a progress update; the customer is notified; strangers cannot read it', async () => {
+  await superAdmin.call('savePaymentSettings', paySettings({ enabled: false, reason: 'Test progress without payments' }))
+  await sleep(16000)   // settings cache
+  progJob = (await customer.call('createRepairRequest', request(`prog-${stamp}`))).jobId
+  const q = (await engineer.call('submitQuote', quote(progJob))).quoteId; await customer.call('acceptQuote', { quoteId: q })
+  await denied(engineer.call('postProgressUpdate', { jobId: progJob, text: 'Too early' }), 'failed-precondition')
+  const slots = (await customer.call('getSlots', { jobId: progJob, date: nextWeekday() })).slots; await customer.call('bookAppointment', { jobId: progJob, startAt: slots.at(-1) })
+  await denied(engineer.call('postProgressUpdate', { jobId: progJob, text: 'x', photoPaths: ['requests/other/p.jpg'] }), 'invalid-argument')
+  const { updateId } = await engineer.call('postProgressUpdate', { jobId: progJob, text: 'Parts ordered, arriving Thursday.', percent: 40 })
+  ok((await A.db.doc(`notifications/progress:${updateId}`).get()).exists, 'customer not notified')
+  ok((await getDoc(doc(customer.db, `repairRequests/${progJob}/progress/${updateId}`))).exists())
+  await denied(getDoc(doc(other.db, `repairRequests/${progJob}/progress/${updateId}`)))
+  eq((await A.db.doc(`repairRequests/${progJob}`).get()).data().progressPercent, 40)
+})
+await step('board moves: invalid transitions and missing reasons are refused; target times are settings-only', async () => {
+  await denied(superAdmin.call('changeJobStatus', { jobId: progJob, to: 'completed', note: 'skip ahead' }), 'failed-precondition')
+  await denied(superAdmin.call('changeJobStatus', { jobId: progJob, to: 'cancelled' }), 'invalid-argument', 'reason')
+  await denied(support.call('changeJobStatus', { jobId: progJob, to: 'cancelled', note: 'not allowed' }), 'permission-denied')
+  await denied(support.call('saveSlaSettings', { hours: { open: 24 } }), 'permission-denied')
+  await superAdmin.call('saveSlaSettings', { hours: { open: 24, in_progress: 96 } })
+  eq((await A.db.doc('platformSettings/public').get()).data().sla.hours.open, 24)
+})
+
 stripeServer.close(); graphServer.close()
 const passed = results.filter(Boolean).length
 console.log(`\n${passed}/${results.length} marketplace steps passed`)

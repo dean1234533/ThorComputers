@@ -22,7 +22,12 @@ service cloud.firestore {
         && onlyChanges(['fullName','phone','postcode','photoURL','notificationPrefs','privacy','updatedAt'])
         && request.resource.data.fullName is string && request.resource.data.fullName.size() <= 80;
       allow create, delete: if false;
+      // Internal staff notes about a customer: never visible to the customer or to engineers.
+      match /contactNotes/{nid} { allow read: if can('customers.manage'); allow write: if false; }
     }
+    match /contactTasks/{id} { allow read: if can('customers.manage'); allow write: if false; }
+    match /contactMeta/{uid} { allow read: if can('customers.manage'); allow write: if false; }   // tags + assigned staff (never on the user doc, which the customer can read)
+    match /contactFinance/{uid} { allow read: if can('finance.view'); allow write: if false; }
 
     // ---------- engineer public profile (written by functions only) ----------
     match /engineerProfiles/{engineerId} {
@@ -70,6 +75,14 @@ service cloud.firestore {
         || (approvedEngineer() && resource.data.status == 'open')
       );
       allow write: if false; // createRepairRequest / updateJobStatus / acceptQuote only
+      // Engineer progress updates: the customer, the selected engineer and job staff.
+      match /progress/{pid} {
+        allow read: if signedIn() && (
+          get(/databases/$(db)/documents/repairRequests/$(jobId)).data.customerId == uid()
+          || get(/databases/$(db)/documents/repairRequests/$(jobId)).data.selectedEngineerId == uid()
+          || can('jobs.view') || can('jobs.manage'));
+        allow write: if false;   // postProgressUpdate()
+      }
       match /private/{doc} {
         // Exact address is released only to the customer, the selected engineer and authorised admins.
         allow read: if signedIn() && (

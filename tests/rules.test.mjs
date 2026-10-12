@@ -276,3 +276,30 @@ test('jobs awaiting verification are hidden from engineers; support can view job
   await assertSucceeds(getDoc(doc(admin(SUPPORT), 'repairRequests/job1')))
   await assertFails(getDoc(doc(admin(SUPPORT), 'repairRequests/job1/private/details')))
 })
+
+// ---------- contact list and progress tracking ----------
+test('staff notes, tags/assignment and money totals are never readable by the customer or engineers', async () => {
+  await env.withSecurityRulesDisabled(async ctx => {
+    const db = ctx.firestore()
+    await setDoc(doc(db, 'users/custA/contactNotes/n1'), { authorId: 'adm1', text: 'Prefers phone calls' })
+    await setDoc(doc(db, 'contactMeta/custA'), { tags: ['vip'], assignedTo: 'adm1' })
+    await setDoc(doc(db, 'contactFinance/custA'), { totalPaidPence: 10000 })
+    await setDoc(doc(db, 'contactTasks/t1'), { userId: 'custA', ownerId: 'adm1', status: 'open' })
+  })
+  for (const who of [customerA(), customerB(), eng()]) {
+    await assertFails(getDoc(doc(who, 'users/custA/contactNotes/n1'))); await assertFails(getDoc(doc(who, 'contactMeta/custA')))
+    await assertFails(getDoc(doc(who, 'contactFinance/custA'))); await assertFails(getDoc(doc(who, 'contactTasks/t1')))
+  }
+  await assertFails(setDoc(doc(customerA(), 'users/custA/contactNotes/n2'), { authorId: 'custA', text: 'x' }))
+  await assertSucceeds(getDoc(doc(admin(SUPPORT), 'users/custA/contactNotes/n1'))); await assertSucceeds(getDoc(doc(admin(SUPPORT), 'contactMeta/custA')))
+  await assertFails(getDoc(doc(admin(SUPPORT), 'contactFinance/custA')))                 // support never sees payment totals
+  await assertSucceeds(getDoc(doc(admin(['finance.view']), 'contactFinance/custA')))
+  await assertFails(setDoc(doc(admin([...ADMIN, 'finance.view']), 'contactMeta/custA'), { tags: [] }))   // writes only through audited callables
+})
+test('progress updates: the customer, the selected engineer and job staff only', async () => {
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'repairRequests/job2/progress/p1'), { authorId: 'eng1', text: 'Screen fitted' }))
+  await assertSucceeds(getDoc(doc(customerA(), 'repairRequests/job2/progress/p1'))); await assertSucceeds(getDoc(doc(eng(), 'repairRequests/job2/progress/p1')))
+  await assertSucceeds(getDoc(doc(admin(SUPPORT), 'repairRequests/job2/progress/p1')))
+  await assertFails(getDoc(doc(customerB(), 'repairRequests/job2/progress/p1'))); await assertFails(getDoc(doc(as('eng9', { role: 'engineer', engineerApproved: true }), 'repairRequests/job2/progress/p1')))
+  await assertFails(setDoc(doc(eng(), 'repairRequests/job2/progress/p2'), { authorId: 'eng1', text: 'direct write' }))
+})

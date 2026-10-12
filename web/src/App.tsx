@@ -35,6 +35,7 @@ const AdminLeads = named(() => import('@/pages/admin/AdminLeads'), 'AdminLeads')
 const AdminDisputes = named(() => import('@/pages/admin/AdminOps'), 'AdminDisputes'), AdminSupport = named(() => import('@/pages/admin/AdminOps'), 'AdminSupport')
 const SupportPage = named(() => import('@/pages/shared/Support'), 'SupportPage'), UserTicket = named(() => import('@/pages/shared/Support'), 'UserTicket'), AdminTicket = named(() => import('@/pages/shared/Support'), 'AdminTicket')
 const Payouts = L(() => import('@/pages/engineer/Payouts'))
+const AdminContacts = named(() => import('@/pages/admin/AdminContacts'), 'AdminContacts'), ContactDetail = named(() => import('@/pages/admin/AdminContacts'), 'ContactDetail'), ProgressBoard = L(() => import('@/pages/admin/ProgressBoard'))
 
 export default function App() {
   return (
@@ -63,7 +64,7 @@ export default function App() {
 
         <Route element={<RequireAuth role="admin" />}><Route element={<AdminMfaGuard />}><Route element={<AppShell />}>
           <Route path="/admin" element={<AdminOverview />} /><Route path="/admin/approvals" element={<Approvals />} /><Route path="/admin/customers" element={<AdminCustomers />} /><Route path="/admin/engineers" element={<AdminEngineers />} />
-          <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/marketing" element={<AdminMarketing />} /><Route path="/admin/leads" element={<AdminLeads />} /><Route path="/admin/leads/:id" element={<LeadDetail />} /><Route path="/admin/finance" element={<AdminFinance />} /><Route path="/admin/disputes" element={<AdminDisputes />} /><Route path="/admin/support" element={<AdminSupport />} /><Route path="/admin/support/:id" element={<AdminTicket />} /><Route path="/admin/security" element={<AdminSecurity />} />
+          <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/marketing" element={<AdminMarketing />} /><Route path="/admin/contacts" element={<AdminContacts />} /><Route path="/admin/contacts/:id" element={<ContactDetail />} /><Route path="/admin/progress" element={<ProgressBoard />} /><Route path="/admin/leads" element={<AdminLeads />} /><Route path="/admin/leads/:id" element={<LeadDetail />} /><Route path="/admin/finance" element={<AdminFinance />} /><Route path="/admin/disputes" element={<AdminDisputes />} /><Route path="/admin/support" element={<AdminSupport />} /><Route path="/admin/support/:id" element={<AdminTicket />} /><Route path="/admin/security" element={<AdminSecurity />} />
         </Route></Route></Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></Suspense>

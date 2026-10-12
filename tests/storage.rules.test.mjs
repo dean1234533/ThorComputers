@@ -82,3 +82,12 @@ test('paths outside the known folders are denied for everyone', async () => {
   await assertFails(put(adm(['admins.manage', 'settings.edit']), 'random/file.png', png(), IMG))
   await assertFails(getBytes(ref(adm(['admins.manage']), 'random/file.png')))
 })
+test('progress photos: only the selected engineer uploads; customer and that engineer read', async () => {
+  await env.withSecurityRulesDisabled(ctx => setDoc(doc(ctx.firestore(), 'repairRequests/jobP'), { customerId: 'custA', selectedEngineerId: 'eng1', status: 'in_progress' }))
+  await assertSucceeds(put(eng(), 'jobs/jobP/progress/a.png', png(), IMG))
+  await assertFails(put(cust(), 'jobs/jobP/progress/b.png', png(), IMG))
+  await assertFails(put(eng2(), 'jobs/jobP/progress/c.png', png(), IMG))
+  await assertSucceeds(getBytes(ref(cust(), 'jobs/jobP/progress/a.png')))
+  await assertFails(getBytes(ref(cust2(), 'jobs/jobP/progress/a.png')))
+  await assertSucceeds(getBytes(ref(adm(['jobs.view']), 'jobs/jobP/progress/a.png')))
+})

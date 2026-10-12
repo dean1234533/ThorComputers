@@ -14,11 +14,12 @@ import { ProviderTerms } from '@/components/ProviderNote'
 import { Avatar, Button, EmptyState, ListSkeleton, Section, Sheet, StatusPill, useToast } from '@/components/ui'
 import { DEVICE_TYPES, JobStatus, gbp, SERVICE_METHODS, JobPayment } from '@/types/domain'
 import PaymentPanel from '@/components/PaymentPanel'
+import JobTimeline from '@/components/JobTimeline'
 import { Textarea } from '@/components/ui'
 import { StorageImg } from '@/components/StorageImg'
 
 export interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; description: string; issues: string[]; urgency: string; location: { area: string }; selectedEngineerId: string | null; acceptedQuoteId: string | null; agreedTotalPence?: number; agreedMethod?: string; photoPaths: string[]; statusHistory?: { status: string; at: { toDate(): Date } }[]; quoteCount: number; provider?: 'independent' | 'thor'; customerId: string
-  payment?: JobPayment; commissionBps?: number; originalQuotePence?: number; pendingRevision?: { n: number; additionalPence: number; reason: string; status: string } | null; revisions?: { n: number; additionalPence: number; reason: string; status: string }[]; source?: string }
+  payment?: JobPayment; commissionBps?: number; originalQuotePence?: number; pendingRevision?: { n: number; additionalPence: number; reason: string; status: string } | null; revisions?: { n: number; additionalPence: number; reason: string; status: string }[]; source?: string; messageCount?: number; lastMessageAt?: { toDate(): Date } }
 
 export default function RepairDetail() {
   const { id } = useParams(); const nav = useNavigate(); const { user } = useAuth(); const toast = useToast()
@@ -77,6 +78,8 @@ export default function RepairDetail() {
           {job.status === 'completed' && <Section title="Your repair is complete"><div className="space-y-3 rounded-3xl bg-ok/10 p-5"><p className="flex items-center gap-2 font-medium text-ok"><CheckCircle2 className="size-5" />Check the work, then close the job or raise a problem.</p>
             <div className="flex flex-wrap gap-2"><Button onClick={() => act('closed')} loading={busy === 'closed'} disabled={!!job.payment?.required && (job.payment.paidPence ?? 0) < (job.agreedTotalPence ?? 0)}>Everything’s fine, close job</Button><Button variant="ghost" onClick={() => setConfirm('dispute')}>Raise a problem</Button></div></div></Section>}
           {['completed', 'closed'].includes(job.status) && !myReview.data && <Section title="Leave a review"><Button variant="cta" onClick={() => setReview(true)}><Star className="size-4" />Review your engineer</Button></Section>}
+
+          {!['awaiting_verification', 'open'].includes(job.status) && <Section title="Repair timeline"><JobTimeline jobId={job.id} job={job} audience="customer" /></Section>}
 
           <Section title="Details"><dl className="space-y-3 text-sm"><div><dt className="text-thor-text">Problem</dt><dd className="whitespace-pre-line">{job.description}</dd></div>
             {priv.data?.addressLine && <div><dt className="text-thor-text">Your address (private)</dt><dd>{priv.data.addressLine}</dd></div>}

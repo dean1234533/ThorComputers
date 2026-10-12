@@ -28,6 +28,7 @@ export const adminStats = callable(z.object({ days: z.number().int().min(1).max(
     recentActivity: activity.docs.map(a => ({ id: a.id, ...a.data(), createdAt: a.data().createdAt?.toMillis() ?? null })),
   }
   const perms = (caller.token.perms as string[] | undefined) ?? []
+  if (perms.includes('customers.manage')) (out.totals as Record<string, number>).overdueTasks = await c(db.collection('contactTasks').where('status', '==', 'open').where('dueAt', '<=', Timestamp.now()))
   if (perms.includes('finance.view')) {
     const tx = db.collection('transactions').where('createdAt', '>=', since).where('createdAt', '<=', until)
     const [gross, commission, engineerShare, refunded, outstanding, disputes, payouts] = await Promise.all([

@@ -9,6 +9,8 @@ export const onMessageCreated = onDocumentCreated({ document: 'conversations/{ci
   const cRef = db.doc(`conversations/${event.params.cid}`), conv = (await cRef.get()).data(); if (!conv) return
   const others = (conv.participants as string[]).filter(u => u !== m.senderId)
   await cRef.update({ lastMessage: m.imagePath && !m.text ? 'Photo' : String(m.text).slice(0, 80), lastMessageAt: FieldValue.serverTimestamp(), ...Object.fromEntries(others.map(u => [`unread.${u}`, FieldValue.increment(1)])) })
+  // Count only (never content) so staff can see activity on the job timeline without reading private messages.
+  if (conv.jobId) await db.doc(`repairRequests/${conv.jobId}`).update({ messageCount: FieldValue.increment(1), lastMessageAt: FieldValue.serverTimestamp() }).catch(() => undefined)
   // Lock-screen safe: never include message text or sender details in push content.
   await Promise.all(others.map(u => notify({ userId: u, category: 'messages', dedupeKey: `msg:${event.params.mid}:${u}`, title: 'New message', body: 'You have a new message about a repair.', link: `/messages/${event.params.cid}` })))
 })
