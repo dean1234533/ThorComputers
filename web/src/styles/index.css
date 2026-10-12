@@ -24,6 +24,7 @@ html { -webkit-text-size-adjust: 100%; }
 body { @apply bg-paper text-ink font-sans antialiased; overscroll-behavior-y: none; }
 :focus-visible { outline: 3px solid var(--color-thor-sky); outline-offset: 2px; border-radius: 6px; }
 .safe-b { padding-bottom: env(safe-area-inset-bottom); }
+.ui-sheet { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom)); }
 .safe-t { padding-top: max(env(safe-area-inset-top), 12px); }
 
 @keyframes shimmer { 100% { transform: translateX(100%); } }

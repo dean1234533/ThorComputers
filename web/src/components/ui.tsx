@@ -127,7 +127,7 @@ export function Sheet({ open, onClose, title, children }: { open: boolean; onClo
     <AnimatePresence>{open && (
       <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center" role="dialog" aria-modal="true" aria-label={title}>
         <motion.div className="absolute inset-0 bg-ink/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-        <motion.div className="safe-b relative max-h-[88dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl md:max-w-lg md:rounded-3xl"
+        <motion.div className="ui-sheet relative max-h-[88dvh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 shadow-2xl md:max-w-lg md:rounded-3xl"
           initial={reduce ? { opacity: 0 } : { y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={reduce ? { opacity: 0 } : { y: 60, opacity: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 320 }}>
           <div className="mb-4 flex items-center justify-between"><h2 className="font-display text-xl">{title}</h2><button onClick={onClose} aria-label="Close" className="rounded-full p-2 hover:bg-ink/5"><X className="size-5" /></button></div>
           {children}

@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode, useCallback } from 'react'
 import { onAuthStateChanged, onIdTokenChanged, User, signOut as fbSignOut } from 'firebase/auth'
-import { doc, onSnapshot, terminate, clearIndexedDbPersistence as clearFs } from 'firebase/firestore'
-import { auth, db } from './firebase'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { useNavigate } from 'react-router-dom'
+import { auth, db, resetDatabaseAfterSignOut } from './firebase'
 import type { AdminPermission, Role } from '@/types/domain'
 
 export interface Profile {
@@ -16,6 +17,8 @@ const AuthCtx = createContext<Ctx>(null!)
 export const useAuth = () => useContext(AuthCtx)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate()
+  const [signingOut, setSigningOut] = useState(false)
   const [user, setUser] = useState<User | null>(null)
   const [claims, setClaims] = useState<Record<string, any>>({})
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -26,25 +29,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profileError, setProfileError] = useState(false)
 
   useEffect(() => onAuthStateChanged(auth, u => { setUser(u); if (!u) { setProfile(null); setClaims({}) } setAuthReady(true) }), [])
-  useEffect(() => onIdTokenChanged(auth, async u => { if (u) setClaims((await u.getIdTokenResult()).claims as any) }), [])
+  useEffect(() => onIdTokenChanged(auth, async u => {
+    if (u) { const token = await u.getIdTokenResult(); if (auth.currentUser === u) setClaims(token.claims as any) }
+  }), [])
   useEffect(() => {
-    if (!user) { setProfileFor(null); setProfileError(false); return }
+    if (!user || signingOut) { setProfileFor(null); setProfileError(false); return }
     setProfileError(false)
     return onSnapshot(doc(db, 'users', user.uid), s => { setProfile(s.exists() ? (s.data() as Profile) : null); setProfileFor(user.uid) },
       () => { setProfileError(true); setProfileFor(user.uid) })   // a failed read must not be mistaken for "no profile yet"
-  }, [user])
+  }, [user, signingOut])
   const profileReady = !user ? profileFor === null : profileFor === user.uid
 
   const refreshClaims = useCallback(async () => { if (auth.currentUser) setClaims((await auth.currentUser.getIdTokenResult(true)).claims as any) }, [])
   const signOut = useCallback(async () => {
-    await fbSignOut(auth)
-    try { await terminate(db); await clearFs(db) } catch { /* cache already cleared */ }   // do not leave private data cached on shared devices
-    location.assign('/login')
-  }, [])
+    setSigningOut(true)
+    try {
+      await fbSignOut(auth)
+      try { await resetDatabaseAfterSignOut() } catch { /* The replacement uses memory if persistent cache clearing fails. */ }
+      navigate('/login', { replace: true, state: null })
+    } finally { setSigningOut(false) }
+  }, [navigate])
 
   const value = useMemo<Ctx>(() => ({
     user, profile, role: (claims.role as Role) ?? profile?.role ?? null, perms: (claims.perms as AdminPermission[]) ?? [], approved: claims.engineerApproved === true, specs: (claims.specs as string[]) ?? [],
     loading: !authReady || !profileReady, needsSetup: !!user && authReady && profileReady && !profile && !profileError, refreshClaims, signOut,
   }), [user, profile, claims, authReady, profileReady, profileError, refreshClaims, signOut])
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
+  return <AuthCtx.Provider value={value}>{signingOut ? <div role="status" className="grid min-h-dvh place-items-center text-thor-blue">Signing out…</div> : children}</AuthCtx.Provider>
 }
