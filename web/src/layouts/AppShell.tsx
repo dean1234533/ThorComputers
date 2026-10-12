@@ -34,7 +34,7 @@ export default function AppShell() {
   const end = (to: string) => ['/customer', '/engineer', '/admin'].includes(to)
 
   return (
-    <div className="workspace min-h-dvh md:pl-[252px]">
+    <div className="min-h-dvh md:pl-[252px]">
       <a href="#main-content" className="sr-only z-50 rounded-lg bg-white p-3 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
       {/* Desktop sidebar */}
       <aside className="app-sidebar fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col px-5 py-7 text-white md:flex">
@@ -65,7 +65,7 @@ export default function AppShell() {
         <div className="flex items-center gap-3 text-xs"><span className="text-thor-text">Workspace</span><ChevronRight className="size-3 text-thor-text/50" /><span className="font-medium">{current?.label ?? 'Details'}</span></div>
         <div className="flex items-center gap-5"><span className="hidden text-xs text-thor-text lg:block">{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'Europe/London' })}</span><div className="h-5 w-px bg-ink/10" /><Link to="/notifications" aria-label="Notifications" className="relative rounded-full p-2 text-thor-text transition hover:bg-ink/5"><Bell className="size-[18px]" /><Badge n={badges.notifications} /></Link><Link to="/profile" aria-label="Your profile"><Avatar src={profile?.photoURL} name={profile?.fullName ?? '?'} size={32} /></Link></div>
       </header>
-      <main id="main-content" className="mx-auto max-w-[1240px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 md:px-8 md:pb-16 md:pt-9 xl:px-12">
+      <main id="main-content" className="mx-auto max-w-[1240px] px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-7 md:px-8 md:pb-16 md:pt-9 xl:px-12">
         <Suspense fallback={<div className="surface p-6" role="status"><div className="flex items-center gap-3 text-sm text-thor-slate"><Spinner />Loading page…</div></div>}><Outlet /></Suspense>
       </main>
 
