@@ -1,13 +1,13 @@
 import { KeyRound, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
 import type { Role } from '@/types/domain'
 
-export interface NavItem { to: string; label: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications' }
+export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications' }
 
 export const NAV: Record<Role, NavItem[]> = {
   customer: [
     { to: '/customer', label: 'Home', icon: Home, primary: true },
     { to: '/customer/repairs', label: 'My Repairs', icon: Wrench, primary: true },
-    { to: '/customer/appointments', label: 'Appointments', icon: CalendarDays, primary: true },
+    { to: '/customer/appointments', label: 'Appointments', mobileLabel: 'Bookings', icon: CalendarDays, primary: true },
     { to: '/messages', label: 'Messages', icon: MessageSquare, primary: true, badge: 'messages' },
     { to: '/customer/quotations', label: 'Quotations', icon: FileText },
     { to: '/notifications', label: 'Notifications', icon: Bell, badge: 'notifications' },
@@ -16,7 +16,7 @@ export const NAV: Record<Role, NavItem[]> = {
   ],
   engineer: [
     { to: '/engineer/jobs', label: 'Available Jobs', icon: Search, primary: true },
-    { to: '/engineer/quotations', label: 'My Quotations', icon: FileText, primary: true },
+    { to: '/engineer/quotations', label: 'My Quotations', mobileLabel: 'Quotes', icon: FileText, primary: true },
     { to: '/engineer/my-jobs', label: 'My Jobs', icon: Briefcase, primary: true },
     { to: '/messages', label: 'Messages', icon: MessageSquare, primary: true, badge: 'messages' },
     { to: '/engineer', label: 'Dashboard', icon: LayoutDashboard },
@@ -29,7 +29,7 @@ export const NAV: Record<Role, NavItem[]> = {
   admin: [
     { to: '/admin', label: 'Overview', icon: LayoutDashboard, primary: true },
     { to: '/admin/approvals', label: 'Approvals', icon: ShieldCheck, primary: true },
-    { to: '/admin/jobs', label: 'Repair Requests', icon: ClipboardList, primary: true },
+    { to: '/admin/jobs', label: 'Repair Requests', mobileLabel: 'Requests', icon: ClipboardList, primary: true },
     { to: '/admin/reports', label: 'Reports', icon: Flag, primary: true },
     { to: '/admin/customers', label: 'Customers', icon: Users },
     { to: '/admin/engineers', label: 'Engineers', icon: HardHat },

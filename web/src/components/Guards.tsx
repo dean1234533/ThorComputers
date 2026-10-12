@@ -1,11 +1,19 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '@/lib/auth'
-import { Logo } from './ui'
+import { useEffect, useState } from 'react'
+import { Spinner } from './ui'
 import type { Role } from '@/types/domain'
 
-export const Splash = () => (
-  <div className="grid min-h-dvh place-items-center bg-thor-blue"><div className="animate-pulse"><Logo className="h-24" onDark /></div></div>
-)
+export function Splash() {
+  const [slow, setSlow] = useState(false)
+  useEffect(() => { const timer = setTimeout(() => setSlow(true), 8000); return () => clearTimeout(timer) }, [])
+  return <div className="boot" role="status">
+    <img src="/icons/icon-192.png" alt="" width={112} height={112} />
+    <h1>Thor Computer</h1><p>{slow ? 'Still connecting. Check your internet connection.' : 'Opening your workspace…'}</p>
+    <div className="mt-4 flex justify-center"><Spinner /></div>
+    {slow && <button className="mt-5 rounded-xl bg-thor-blue px-5 py-3 text-sm font-semibold text-white" onClick={() => window.location.reload()}>Try again</button>}
+  </div>
+}
 export const homeFor = (r: Role | null) => (r ? `/${r}` : '/login')
 
 export function RequireAuth({ role }: { role?: Role }) {

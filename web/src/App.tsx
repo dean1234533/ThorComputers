@@ -1,8 +1,8 @@
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from '@/lib/auth'
 import { ToastProvider } from '@/components/ui'
-import { RedirectHome, RequireAuth } from '@/components/Guards'
+import { RedirectHome, RequireAuth, Splash } from '@/components/Guards'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import PushBridge from '@/components/PushBridge'
 import UpdatePrompt from '@/components/UpdatePrompt'
@@ -34,7 +34,7 @@ const AdminSettings = L(() => import('@/pages/admin/AdminSettings')), AdminSecur
 export default function App() {
   return (
     <ErrorBoundary><BrowserRouter><ToastProvider><AuthProvider><UpdatePrompt /><OfflineBanner /><PushBridge />
-      <Routes>
+      <Suspense fallback={<Splash />}><Routes>
         <Route path="/login" element={<Login />} /><Route path="/register" element={<Register />} /><Route path="/forgot" element={<Forgot />} />
         <Route path="/install" element={<Install />} /><Route path="/privacy" element={<Privacy />} /><Route path="/continue" element={<Continue />} />
         <Route path="/setup" element={<Setup />} /><Route path="/verify" element={<Verify />} />
@@ -59,7 +59,7 @@ export default function App() {
           <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/security" element={<AdminSecurity />} />
         </Route></Route></Route>
         <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      </Routes></Suspense>
     </AuthProvider></ToastProvider></BrowserRouter></ErrorBoundary>
   )
 }

@@ -4,17 +4,17 @@ import { db, auth, callable, requireRole, requirePerm, audit, FieldValue, Timest
 export const adminStats = callable(z.object({}), async (req) => {
   requirePerm(req, 'reports.view')
   const c = async (q: FirebaseFirestore.Query) => (await q.count().get()).data().count
-  const [customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports] = await Promise.all([
+  const since = Timestamp.fromMillis(Date.now() - 14 * 86400_000)
+  const [customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports, recent, activity] = await Promise.all([
     c(db.collection('users').where('role', '==', 'customer')), c(db.collection('engineerProfiles').where('status', '==', 'approved')),
     c(db.collection('engineerApplications').where('status', '==', 'pending')), c(db.collection('repairRequests').where('status', '==', 'open')),
     c(db.collection('repairQuotes').where('status', '==', 'submitted')), c(db.collection('appointments').where('status', '==', 'confirmed')),
     c(db.collection('repairRequests').where('status', 'in', ['completed', 'closed'])), c(db.collection('reports').where('status', '==', 'open')),
+    db.collection('repairRequests').where('createdAt', '>', since).select('createdAt').limit(2000).get(),
+    db.collection('auditLogs').orderBy('createdAt', 'desc').limit(15).get(),
   ])
-  const since = Timestamp.fromMillis(Date.now() - 14 * 86400_000)
-  const recent = await db.collection('repairRequests').where('createdAt', '>', since).select('createdAt').limit(2000).get()
   const perDay: Record<string, number> = {}
   recent.docs.forEach(d => { const k = d.data().createdAt.toDate().toISOString().slice(0, 10); perDay[k] = (perDay[k] ?? 0) + 1 })
-  const activity = await db.collection('auditLogs').orderBy('createdAt', 'desc').limit(15).get()
   return { totals: { customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports }, requestsPerDay: perDay,
     recentActivity: activity.docs.map(a => ({ id: a.id, ...a.data(), createdAt: a.data().createdAt?.toMillis() ?? null })) }
 })

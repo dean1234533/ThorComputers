@@ -147,6 +147,23 @@ const adm = await newSession('superadmin', false)
 await step('super admin signs in and lands on /admin', async () => { await login(adm, 'superadmin@demo.test'); ok(new URL(adm.page.url()).pathname === '/admin', adm.page.url()) })
 for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/notifications', '/settings'])
   await step(`super admin ${p}`, () => visit(adm, p))
+await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
+  await visit(adm, '/admin')
+  for (const width of [320, 390]) {
+    await adm.page.setViewport({ width, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })
+    // Changing the mobile emulation can reload the page; wait for auth and the shell again.
+    await adm.page.waitForSelector('.mobile-tab')
+    const layout = await adm.page.evaluate(() => {
+      const tabs = [...document.querySelectorAll('.mobile-tab')]
+      return { overflow: document.documentElement.scrollWidth > innerWidth, heights: tabs.map(t => t.getBoundingClientRect().height), labelsFit: tabs.every(t => { const l = t.querySelector('.tab-label'); return l.scrollWidth <= t.clientWidth }), requests: tabs.some(t => t.textContent === 'Requests') }
+    })
+    ok(!layout.overflow, `horizontal overflow at ${width}px`)
+    ok(layout.heights.length === 5 && layout.heights.every(h => h === 64), 'tabs must have equal heights')
+    ok(layout.labelsFit && layout.requests, 'mobile labels must fit on one line')
+  }
+  if (SHOTS) await adm.page.screenshot({ path: join(SHOTS, 'admin-mobile-overview.png') })
+  await adm.page.setViewport({ width: 1280, height: 800 })
+})
 await step('admin is bounced from customer/engineer areas', async () => { await visit(adm, '/customer', { expectPath: '/admin' }) })
 const sup = await newSession('support', false)
 await step('support admin signs in; settings page does not crash', async () => { await login(sup, 'support@demo.test'); await visit(sup, '/admin'); await visit(sup, '/admin/customers'); await visit(sup, '/admin/settings') })

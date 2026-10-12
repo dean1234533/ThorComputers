@@ -1,6 +1,6 @@
 import { useState, Suspense } from 'react'
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { motion } from 'motion/react'
 import { Bell, MoreHorizontal, LogOut, ChevronRight, ArrowUpRight, Laptop } from 'lucide-react'
 import { limit, orderBy, where } from 'firebase/firestore'
 import { useAuth } from '@/lib/auth'
@@ -25,7 +25,6 @@ export default function AppShell() {
   const { role, profile, signOut } = useAuth()
   const badges = useBadges()
   const loc = useLocation()
-  const reduce = useReducedMotion()
   const [more, setMore] = useState(false)
   const items = NAV[role ?? 'customer']
   const primary = items.filter(i => i.primary), secondary = items.filter(i => !i.primary)
@@ -35,7 +34,7 @@ export default function AppShell() {
   const end = (to: string) => ['/customer', '/engineer', '/admin'].includes(to)
 
   return (
-    <div className="min-h-dvh md:pl-[252px]">
+    <div className="workspace min-h-dvh md:pl-[252px]">
       <a href="#main-content" className="sr-only z-50 rounded-lg bg-white p-3 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Skip to content</a>
       {/* Desktop sidebar */}
       <aside className="app-sidebar fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col px-5 py-7 text-white md:flex">
@@ -66,21 +65,17 @@ export default function AppShell() {
         <div className="flex items-center gap-3 text-xs"><span className="text-thor-text">Workspace</span><ChevronRight className="size-3 text-thor-text/50" /><span className="font-medium">{current?.label ?? 'Details'}</span></div>
         <div className="flex items-center gap-5"><span className="hidden text-xs text-thor-text lg:block">{new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'Europe/London' })}</span><div className="h-5 w-px bg-ink/10" /><Link to="/notifications" aria-label="Notifications" className="relative rounded-full p-2 text-thor-text transition hover:bg-ink/5"><Bell className="size-[18px]" /><Badge n={badges.notifications} /></Link><Link to="/profile" aria-label="Your profile"><Avatar src={profile?.photoURL} name={profile?.fullName ?? '?'} size={32} /></Link></div>
       </header>
-      <main id="main-content" className="mx-auto max-w-[1240px] px-5 pb-28 pt-7 md:px-8 md:pb-16 md:pt-9 xl:px-12">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={loc.pathname} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={reduce ? undefined : { opacity: 0 }} transition={{ duration: .18 }}>
-            <Suspense fallback={<div className="grid place-items-center py-24"><Spinner /></div>}><Outlet /></Suspense>
-          </motion.div>
-        </AnimatePresence>
+      <main id="main-content" className="mx-auto max-w-[1240px] px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 md:px-8 md:pb-16 md:pt-9 xl:px-12">
+        <Suspense fallback={<div className="surface p-6" role="status"><div className="flex items-center gap-3 text-sm text-thor-slate"><Spinner />Loading page…</div></div>}><Outlet /></Suspense>
       </main>
 
       {/* Mobile bottom navigation: four primary destinations + More */}
-      <nav className="safe-b fixed inset-x-0 bottom-0 z-40 border-t border-ink/10 bg-white/95 backdrop-blur md:hidden" aria-label="Main">
+      <nav className="mobile-nav safe-b fixed inset-x-0 bottom-0 z-40 md:hidden" aria-label="Main">
         <ul className="mx-auto grid max-w-lg grid-cols-5">
           {primary.slice(0, 4).map(i => (
-            <li key={i.to}><NavLink to={i.to} end={end(i.to)} className={({ isActive }) => cx('flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition', isActive ? 'text-thor-blue' : 'text-thor-text')}>
-              <span className="relative"><i.icon className="size-6" /><Badge n={count(i)} /></span>{i.label.replace('Available ', '').replace('My ', '')}</NavLink></li>))}
-          <li><button onClick={() => setMore(true)} className="flex w-full flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium text-thor-text"><MoreHorizontal className="size-6" />More</button></li>
+            <li key={i.to}><NavLink to={i.to} end={end(i.to)} className={({ isActive }) => cx('mobile-tab', isActive ? 'active' : '')}>
+              <span className="tab-icon relative"><i.icon className="size-5" /><Badge n={count(i)} /></span><span className="tab-label">{i.mobileLabel ?? i.label.replace('Available ', '').replace('My ', '')}</span></NavLink></li>))}
+          <li><button onClick={() => setMore(true)} aria-expanded={more} className={cx('mobile-tab', (more || secondary.some(i => i.to === current?.to)) && 'active')}><span className="tab-icon"><MoreHorizontal className="size-5" /></span><span className="tab-label">More</span></button></li>
         </ul>
       </nav>
       <Sheet open={more} onClose={() => setMore(false)} title="More">
