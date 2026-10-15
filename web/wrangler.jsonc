@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "thor-computer-app",
+  "name": "thorcomputers",
   "compatibility_date": "2026-10-01",
   // Static single-page app served from the Vite build. Unknown paths fall back to index.html so /customer, /login etc. work on refresh.
   "assets": {
