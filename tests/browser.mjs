@@ -103,6 +103,8 @@ await step('bad password shows a friendly error and stays on /login', async () =
   await pub.page.waitForFunction(() => document.body.innerText.includes('Incorrect email or password'), { timeout: 10000 })
 })
 
+await step('privacy page keeps its "Draft for legal review" notice until the owner publishes an approved policy', async () => { await visit(pub, '/privacy', { mustContain: 'Draft for legal review' }) })
+
 console.log('\nCustomer')
 const cust = await newSession('customer')
 await step('customer signs in through the UI and lands on /customer', async () => { await login(cust, 'customer@demo.test'); ok(new URL(cust.page.url()).pathname === '/customer', cust.page.url()) })
@@ -139,6 +141,35 @@ await step('customer completes the request wizard in the UI and the job appears'
   await cust.page.waitForFunction(() => document.body.innerText.includes('Request submitted'), { timeout: 20000 }).catch(async e => { throw new Error(`${e.message} | page says: ${(await bodyText(cust.page)).replace(/\s+/g, ' ').slice(0, 400)} | console: ${cust.lines.filter(l => l.includes('callable')).join(' // ').slice(0, 400)}`) })
   await visit(cust, '/customer/repairs'); ok((await bodyText(cust.page)).includes('ThinkPad'), 'new job not listed')
 })
+const dismissPrompts = async page => { for (const t of ['Maybe later', 'Not now']) await clickText(page, t, 'button').catch(() => {}) }
+const chatSay = async (s, label) => { await clickText(s.page, label, 'button'); await sleep(900) }
+const panelRect = page => page.evaluate(() => { const r = document.querySelector('[role=dialog][aria-label="Thor Computer assistant"]')?.getBoundingClientRect(); return r ? { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), vw: innerWidth, vh: innerHeight, sw: document.documentElement.scrollWidth } : null })
+await step('assistant (mobile 390px): guided intake by tapping and typing, no AI needed, ends in a pre-filled request the customer still has to submit', async () => {
+  await visit(cust, '/customer'); await dismissPrompts(cust.page); await clickText(cust.page, 'Open assistant', 'button'); await sleep(500)
+  const r0 = await panelRect(cust.page); ok(r0 && r0.left >= 0 && r0.right <= r0.vw && r0.sw <= r0.vw, `chat panel overflows the mobile screen: ${JSON.stringify(r0)}`)
+  await chatSay(cust, 'Request a repair'); await cust.page.waitForFunction(() => document.body.innerText.includes('What needs repairing'), { timeout: 8000 })
+  await chatSay(cust, 'Laptop'); await cust.page.waitForFunction(() => document.body.innerText.includes('make and model'), { timeout: 8000 })
+  await chatSay(cust, 'HP'); await cust.page.waitForFunction(() => document.body.innerText.includes('What’s it doing'), { timeout: 8000 })
+  await chatSay(cust, 'Slow or freezing'); await cust.page.waitForFunction(() => document.body.innerText.includes('How would you like it repaired'), { timeout: 8000 })
+  await chatSay(cust, 'Home visit'); await cust.page.waitForFunction(() => document.body.innerText.includes('postcode'), { timeout: 8000 })
+  await cust.page.type('input[aria-label=Message]', 'e15 1aa'); await cust.page.keyboard.press('Enter'); await cust.page.waitForFunction(() => document.body.innerText.includes('How urgent'), { timeout: 8000 })
+  await chatSay(cust, 'Urgent'); await cust.page.waitForFunction(() => document.body.innerText.includes('Here’s what I have'), { timeout: 8000 })
+  const t = await bodyText(cust.page); ok(/Device: Laptop \(HP\)/.test(t) && /Postcode: E15 1AA/.test(t) && /Urgency: Urgent/.test(t), 'summary is wrong: ' + t.slice(-400)); ok(!/Request submitted/.test(t))
+  await chatSay(cust, 'Review & submit'); await cust.page.waitForFunction(() => location.pathname === '/customer/new-request', { timeout: 10000 })
+  const draft = JSON.parse(await cust.page.evaluate(() => sessionStorage.getItem('thor.request.draft') ?? '{}'))
+  ok(draft.device === 'laptop' && draft.manufacturer === 'HP' && draft.postcode === 'E15 1AA' && draft.urgency === 'urgent' && draft.methods?.includes('home') && /slow/i.test(draft.description), 'the request form was not pre-filled: ' + JSON.stringify(draft))
+  ok(!(await bodyText(cust.page)).includes('Request submitted'), 'the assistant must not submit for the customer')
+})
+await step('assistant: FAQ answers, buttons, restart and the support route all work without any AI', async () => {
+  await visit(cust, '/customer'); await dismissPrompts(cust.page); await clickText(cust.page, 'Open assistant', 'button'); await sleep(400)
+  await cust.page.type('input[aria-label=Message]', 'how do i cancel my appointment'); await cust.page.keyboard.press('Enter'); await cust.page.waitForFunction(() => /Cancel on the booking/.test(document.body.innerText), { timeout: 8000 })
+  await cust.page.type('input[aria-label=Message]', 'i want to talk to a human'); await cust.page.keyboard.press('Enter'); await cust.page.waitForFunction(() => /Talk to a person/.test(document.body.innerText), { timeout: 8000 })
+  await clickText(cust.page, 'Start over', 'button'); await sleep(400); ok(!/Cancel on the booking/.test(await bodyText(cust.page)), 'restart did not clear the conversation')
+})
+await step('assistant (desktop 1280px): panel sits inside the window and the page does not scroll sideways', async () => {
+  const d = await newSession('chatdesk', false); await login(d, 'customer@demo.test'); await visit(d, '/customer'); await dismissPrompts(d.page); await clickText(d.page, 'Open assistant', 'button'); await sleep(500)
+  const r = await panelRect(d.page); ok(r && r.left >= 0 && r.right <= r.vw && r.top >= 0 && r.bottom <= r.vh && r.sw <= r.vw && r.right - r.left <= 440, JSON.stringify(r)); await d.ctx.close()
+})
 await step('customer signs out cleanly (mobile: via the More sheet)', async () => { await clickText(cust.page, 'More'); await sleep(600); await clickText(cust.page, 'Sign out'); await cust.page.waitForFunction(() => location.pathname === '/login', { timeout: 10000 }) })
 
 console.log('\nEngineer')
@@ -168,6 +199,17 @@ for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engin
   await step(`super admin ${p}`, () => visit(adm, p))
 await step('admin overview lists new repair requests live, with source and status', async () => {
   await visit(adm, '/admin', { mustContain: 'New repair requests' }); const t = await bodyText(adm.page); ok(/THR-DEMO01|XPS 13|ThinkPad/.test(t), 'no incoming jobs shown on the overview')
+})
+await step('finance page separates original engineer share, refunded amounts and remaining payable', async () => { await visit(adm, '/admin/finance', { mustContain: 'Remaining payable to engineers' }); const t = await bodyText(adm.page); ok(/Engineer share \(original\)/.test(t) && /Refunded from engineers/.test(t) && /Awaiting payout \(after refunds\)/.test(t)) })
+await step('marketing page: the connection check reports honestly (nothing connected ⇒ never "working")', async () => {
+  await visit(adm, '/admin/marketing', { mustContain: 'Run connection check' }); await clickText(adm.page, 'Run connection check', 'button')
+  await adm.page.waitForFunction(() => /Lead import NOT verified yet/.test(document.body.innerText), { timeout: 15000 }); const t = await bodyText(adm.page)
+  ok(/no Meta account is connected|required settings are missing/.test(t), t.slice(0, 600)); ok(!/Set up correctly/.test(t), 'claimed to be set up while nothing is connected'); ok(/What to do:/.test(t), 'no remedy shown')
+})
+await step('settings: assistant FAQ/limits/metrics editor and the legal publishing form are present', async () => {
+  await visit(adm, '/admin/settings', { mustContain: 'Assistant (guided answers + AI fallback)' }); const t = await bodyText(adm.page)
+  ok(/AI answers per customer per day/.test(t) && /spending cap/.test(t) && /Legal: privacy policy and business details/.test(t) && /Publish approved policy/.test(t), 'settings sections missing')
+  await clickText(adm.page, 'Edit FAQ answers', 'button'); await adm.page.waitForFunction(() => /Cancelling an appointment/.test(document.body.innerText), { timeout: 8000 })
 })
 await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
   await visit(adm, '/admin')

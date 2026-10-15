@@ -64,6 +64,21 @@ const messages: Record<string, string> = {
   'This link has expired.': 'This link has expired. Please request a new link.',
   'Sign in with the email address you used on thorcomputer.com.': 'Please sign in with the email address you used on thorcomputer.com.',
   'You have repairs in progress. Complete or cancel them before deleting your account.': 'Please finish or cancel your active repairs before deleting your account.',
+  'This engineer has not finished payment setup yet. Please contact support or message the engineer.': 'Your engineer hasn’t finished setting up payments, so you can’t pay for this job yet. Please message them and ask them to complete payment setup, or contact Thor Computer support. Nothing has been charged.',
+  'Choose an engineer’s quotation first.': 'Choose an engineer’s quotation before paying.',
+  'The accepted quotation is no longer valid.': 'The accepted quotation has changed, so this payment can’t go ahead. Please check the repair or contact Thor Computer.',
+  'Payments are not configured yet.': 'Payments aren’t available yet. Please contact Thor Computer for help. Nothing has been charged.',
+  'The payment provider rejected the request.': 'Our payment provider couldn’t start this payment. Please try again in a moment, or contact Thor Computer. Nothing has been charged.',
+  'Approve the extra charge first.': 'Please approve the extra work first, then pay for it.',
+  'Already paid.': 'This has already been paid.',
+  'Charge not found.': 'We couldn’t find that charge.',
+  'Not your charge.': 'This charge isn’t linked to your account.',
+  'Already answered.': 'You’ve already answered this request.',
+  'Extra work can only be proposed while the repair is under way.': 'Extra work can only be requested while the repair is under way.',
+  'This repair is already finished, so its appointment can’t be changed.': 'This repair is already finished, so its appointment can’t be changed.',
+  'Please complete payment before booking your appointment.': 'Please pay for this repair first, then book your appointment.',
+  'Only paid transactions can be refunded.': 'Only paid transactions can be refunded.',
+  'No payment is recorded for this transaction.': 'No payment is recorded for this transaction yet.',
   'Could not process image': 'We couldn’t read that photo. Please choose another photo.',
 }
 
@@ -73,6 +88,7 @@ export function userMessage(error: unknown): string {
   const raw = typeof record.message === 'string' ? record.message : typeof error === 'string' ? error : ''
   const message = raw.replace(/^Firebase:\s*/i, '').replace(/\s*\((?:auth|functions|storage|firestore)\/[\w-]+\)\.?$/, '').trim()
   if (Object.hasOwn(messages, message)) return messages[message]
+  if (/^At most £[\d.]+ can still be refunded\.$/.test(message)) return message
   const ref = message.match(/\(ref (E[0-9A-F]{6})\)/)?.[1]
   if (ref) return `We hit a problem on our side and couldn’t finish that. Please try again in a minute. If it keeps happening, contact Thor Computer and quote reference ${ref}.`
   if (/paused for a short while/.test(message)) return message

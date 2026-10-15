@@ -2,6 +2,9 @@
 
 Everything here is built and tested **locally against the Firebase emulators** (`npm run test:integrations`, 46 checks). Stripe, Meta and Gemini are mocked *inside the functions* when running locally; **nothing has been run against the real services yet**. This page lists exactly what you must configure to make each one real, in order.
 
+## App web address
+Every link the backend gives to Stripe (checkout success/cancel, onboarding return/refresh), emails, push notifications, Meta OAuth and WordPress confirmations is built from **one validated base URL**: `APP_URL` in `functions/.env`, https, origin only, falling back to the deployed app if it is missing or invalid (`functions/src/app-url.ts`). It is currently `https://thorcomputers.dbsworkouts.workers.dev`. `app.thorcomputer.com` did not resolve (DNS NXDOMAIN) and sent customers to a dead page after paying; only switch `APP_URL` to it once that domain loads the app. Redeploy functions after changing it.
+
 ## Deploy order
 1. `firebase deploy --only firestore:rules,firestore:indexes` (new rules and 4 new composite indexes; indexes take a few minutes to build).
 2. Set the secrets (below). A function that declares a secret cannot deploy until that secret exists, so create **all** of them first. A placeholder such as `not-set-yet` is fine for features you are not enabling yet: the feature then fails safely.
@@ -55,8 +58,8 @@ Meta setup:
 
 Safety: budget changes need an explicit confirmation, a configurable daily cap (default £50) and a per-change cap (default 50%); pause/resume needs confirmation; every change is audited. Missed webhooks are recovered hourly (and on demand) by reconciliation; unconverted leads lose their personal data after 90 days. The Graph API version defaults to `v23.0` (`META_GRAPH_VERSION` overrides it): check it is still current when you go live. Campaign figures from non-GBP ad accounts are excluded from GBP totals.
 
-## AI assistant
-Customer-only chat button. The Gemini key lives server-side. The model has **no tools**: it can chat and suggest a draft, and the draft only pre-fills the normal request form where the customer reviews and submits. It sees only the signed-in customer’s own job summaries. Conversations are **not stored** (only per-day message counts). Limits and the on/off switch are in **Admin → Platform Settings → AI assistant**. Model: `gemini-2.5-flash` by default (`GEMINI_MODEL` overrides).
+## AI assistant (rules first, AI last)
+Almost every message is answered by built-in rules at no cost; the AI (Gemini, key held server-side) is only a guarded last resort for open-ended on-topic questions, with per-customer and global daily limits, a short timeout, one retry, validated output and a deterministic answer on any failure. Repair intake is deterministic and only ever pre-fills the normal request form. Conversations are not stored. Full details, admin controls and retention: **`docs/ASSISTANT.md`**.
 
 ## Admin permissions added
 `marketing.manage` (leads, campaigns, ROI), `finance.view` (money), `payments.manage` (refunds, disputes), `integrations.manage` (connect Meta), `ai.manage`. **Super admin**: all. **Admin**: marketing + AI. **Support admin**: none of these, and cannot read lead PII or any financial data (enforced in rules and functions, tested).

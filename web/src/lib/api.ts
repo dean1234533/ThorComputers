@@ -17,6 +17,16 @@ export interface ReviewInput { jobId: string; ratings: Record<string, number>; t
 
 export interface AdminMfaStatus { mode: 'off' | 'warn' | 'enforce'; sessionHasSecondFactor: boolean; enrolledFactors: number; admins?: { uid: string; email: string; enrolledFactors: number }[] }
 
+export interface MetaCheck { id: string; label: string; ok: boolean; detail: string; fix?: string; required?: boolean }
+export interface MetaSelfTest { overall: 'not_configured' | 'not_connected' | 'needs_attention' | 'ready'; ingestionVerified: boolean; lastWebhookAt: number | null; lastLeadAt: number | null; checks: MetaCheck[]; notes: string[] }
+export interface LegalInput { businessName: string; registeredAddress: string; companyNumber?: string; contactEmail: string; icoNumber?: string; icoExempt?: boolean; privacyText: string; approved: boolean }
+export interface QuickReply { label: string; value: string }
+export interface ChatReply { reply: string; quickReplies: QuickReply[]; draft: Record<string, any> | null; ready: boolean; openForm: boolean; escalate: boolean; source: 'rules' | 'ai' | 'fallback'; state: unknown; remainingToday: number }
+export interface AiSettingsInput {
+  enabled: boolean; aiFallbackEnabled: boolean; welcome: string; escalation: string; knowledge?: string; model?: string; dailyLimit: number; aiDailyLimit: number; globalAiDailyLimit: number
+  aiTimeoutMs?: number; costInMicrosPer1k?: number; costOutMicrosPer1k?: number; faqOverrides?: Record<string, { answer?: string; enabled?: boolean }>; customFaqs?: { id: string; questions: string[]; answer: string }[]
+}
+
 export const api = {
   completeRegistration: fn<{ role: 'customer' | 'engineer'; fullName: string; phone: string; postcode: string; consent: true }>('completeRegistration'),
   exportMyData: fn<object, Record<string, unknown>>('exportMyData'),
@@ -71,11 +81,15 @@ export const api = {
   saveLeadMapping: fn<{ formId: string; fields: Record<string, string[]>; required: string[] }>('saveLeadMapping'),
   saveCampaignRouting: fn<{ campaignId: string; enabled: boolean; deviceType?: string; serviceMethod?: string }>('saveCampaignRouting'),
   saveMarketingSettings: fn<{ requiredFields: string[]; defaultFeedsMarketplace: boolean; attributionWindowDays: number; maxDailyBudgetPence: number; maxBudgetChangePct: number; autoImport: boolean }>('saveMarketingSettings'),
+  metaSelfTest: fn<object, MetaSelfTest>('metaSelfTest'),
+  saveLegalSettings: fn<LegalInput>('saveLegalSettings'),
   adminMarketingStats: fn<{ from?: string; to?: string }, any>('adminMarketingStats'),
   // AI assistant
-  chatbotMessage: fn<{ messages: { role: 'user' | 'assistant'; text: string }[] }, { reply: string; draft: Record<string, any> | null; ready: boolean; escalate: boolean; remainingToday: number }>('chatbotMessage'),
-  saveAiSettings: fn<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string; model?: string }>('saveAiSettings'),
-  aiUsage: fn<object, { perDay: Record<string, { messages: number; users: number }> }>('aiUsage'),
+  /** 20 s ceiling: the assistant must never leave a customer on "Thinking…" indefinitely. */
+  chatbotMessage: async (input: { text: string; state?: unknown }): Promise<ChatReply> => (await httpsCallable<typeof input, ChatReply>(functions, 'chatbotMessage', { timeout: 20000 })(input)).data,
+  chatFaqCatalog: fn<object, { intents: { id: string; label: string; topic: string; answer: string; account: boolean }[] }>('chatFaqCatalog'),
+  saveAiSettings: fn<AiSettingsInput>('saveAiSettings'),
+  aiUsage: fn<object, { perDay: Record<string, { messages: number; users: number }>; metrics: Record<string, Record<string, number>> }>('aiUsage'),
 }
 
 export { userMessage as errMsg } from './errors'

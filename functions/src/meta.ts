@@ -2,8 +2,9 @@ import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { z } from 'zod'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { db, callable, requirePerm, notifyAdmins, audit, FieldValue, Timestamp, HttpsError, APP_URL, REGION } from './core'
+import { db, callable, requirePerm, notifyAdmins, audit, FieldValue, Timestamp, HttpsError, LINKS, REGION } from './core'
 import { MOCK, encryptToken, decryptToken, getMarketingSettings, MARKETING_DEFAULTS, health } from './external'
+import { resolveAppUrl } from './app-url'
 import { verifyMetaSignature, mapLead, DEFAULT_MAPPING, APP_LEAD_FIELDS, isTruthyConsent, LeadMapping, MetaFieldData, AppLeadField } from './integrations-domain'
 import { sendEmail, p } from './email'
 
@@ -14,6 +15,7 @@ export const META_SCOPES = ['ads_read', 'ads_management', 'leads_retrieval', 'pa
 const sha = (s: string) => createHash('sha256').update(s).digest('hex')
 const appSecret = () => process.env.META_APP_SECRET ?? ''
 
+const expectedWebhookUrl = () => `https://${REGION}-${process.env.GCLOUD_PROJECT ?? 'your-project'}.cloudfunctions.net/metaWebhook`
 export class MetaError extends Error { constructor(public status: number, public code: number | null, msg: string) { super(msg) } }
 
 // ---------- Graph API client (real in production, local fixtures under the emulator) ----------
@@ -22,7 +24,9 @@ async function mockGraph(path: string, method: string, params: Record<string, st
   if (path === '/me') return { id: '1000', name: 'Mock Meta User' }
   if (path === '/me/accounts') return { data: [{ id: 'PAGE1', name: 'Thor Computer (mock page)', access_token: 'mock-page-token' }] }
   if (path === '/me/adaccounts') return { data: [{ id: 'act_1', name: 'Thor Ads (mock)', currency: 'GBP', account_status: 1 }] }
-  if (/\/subscribed_apps$/.test(path)) return { success: true }
+  if (path === '/me/permissions') return { data: ['ads_read', 'ads_management', 'leads_retrieval', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_manage_ads', 'business_management'].map(permission => ({ permission, status: 'granted' })) }
+  if (/\/subscribed_apps$/.test(path)) return method === 'GET' ? { data: [{ id: process.env.META_APP_ID ?? 'mock', subscribed_fields: ['leadgen'] }] } : { success: true }
+  if (/\/subscriptions$/.test(path)) return { data: [{ object: 'page', callback_url: expectedWebhookUrl(), active: true, fields: [{ name: 'leadgen', version: 'v26.0' }] }] }
   if (/^\/act_\w+\/campaigns$/.test(path)) return { data: [{ id: 'camp_1', name: 'Laptop Repairs London', status: 'ACTIVE', objective: 'OUTCOME_LEADS', daily_budget: '2000' }, { id: 'camp_2', name: 'Gaming PC Repairs', status: 'PAUSED', objective: 'OUTCOME_LEADS', daily_budget: '1500' }] }
   if (/^\/act_\w+\/insights$/.test(path)) return { data: [{ campaign_id: 'camp_1', spend: '45.50', impressions: '12000', reach: '9000', clicks: '310', actions: [{ action_type: 'lead', value: '12' }] }, { campaign_id: 'camp_2', spend: '10.00', impressions: '2000', reach: '1500', clicks: '40', actions: [{ action_type: 'lead', value: '2' }] }] }
   if (/\/leadgen_forms$/.test(path)) return { data: [{ id: 'form_1', name: 'Laptop repair form', status: 'ACTIVE' }] }
@@ -76,7 +80,7 @@ export const metaConnectUrl = callable(z.object({}), async (req) => {
 }, { secrets: META_SECRETS })
 
 export const metaOAuthCallback = onRequest({ region: REGION, cors: false, secrets: META_SECRETS }, async (req, res) => {
-  const back = (q: string) => res.redirect(302, `${APP_URL}/admin/marketing?${q}`)
+  const back = (q: string) => res.redirect(302, LINKS.metaReturn(q))
   try {
     const code = String(req.query.code ?? ''), state = String(req.query.state ?? '')
     const [payload, sig] = state.split('.')
@@ -187,7 +191,7 @@ export async function createLeadEnquiry(leadId: string, sendMail: boolean): Prom
   await eRef.set({ source: 'meta', submissionId: `meta:${leadId}`, metaLeadId: leadId, status: 'awaiting_customer', fields, email: v.email, emailHash: sha(v.email), tokenHash: sha(token),
     attribution: lead.attribution, consent: lead.consent, createdAt: cur?.createdAt ?? FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 14 * 86400_000) }, { merge: true })
   await db.doc(`metaLeads/${leadId}`).update({ enquiryId: enqId, updatedAt: FieldValue.serverTimestamp() })
-  const url = `${APP_URL}/continue?e=${enqId}&t=${token}`
+  const url = LINKS.continueLink(enqId, token)
   if (sendMail) await sendEmail({ to: v.email, subject: 'Confirm your Thor Computer repair request', heading: `Thanks, ${fields.first_name}`,
     html: `<p>We received your repair enquiry${fields.brand ? ` for your <b>${p(fields.brand)} ${p(fields.model)}</b>` : ''}.</p><p>Confirm the details to send your request to approved engineers, who will then send you quotations.</p>`, cta: { label: 'Confirm my request', url } })
     .catch(e => console.error('lead email failed', e.message))
@@ -401,4 +405,61 @@ export const adminMarketingStats = callable(z.object({ from: z.string().regex(/^
     validLeads: T(r => r.valid), jobs: T(r => r.jobs), withBids: T(r => r.withBids), accepted: T(r => r.accepted), paid: T(r => r.paid), completed: T(r => r.completed), grossPence: T(r => r.grossPence), commissionPence: T(r => r.commissionPence),
     // Commission is revenue, not profit: ad spend is shown beside it, Stripe fees/refunds/operating costs/tax are not deducted here.
     commissionMinusSpendPence: T(r => r.commissionPence) - spend, campaigns }
+})
+
+
+// ---------- connection self-check: real API calls, honest verdicts ----------
+interface Check { id: string; label: string; ok: boolean; detail: string; fix?: string; required?: boolean }
+const isPlaceholder = (v?: string) => !v || v === 'not-set-yet'
+
+/** Never reports "working" because a page loads. It calls Meta and compares what Meta actually says with what the integration needs, and it separates "set up correctly" from
+ *  "a lead has really been imported". Meta only sends real lead webhooks once the app is published; in Development mode use Meta's Lead Ads Testing Tool plus "Check for missed leads". */
+export const metaSelfTest = callable(z.object({}), async (req) => {
+  requirePerm(req, 'marketing.manage')
+  const checks: Check[] = [], add = (c: Check) => checks.push({ required: true, ...c })
+  const appId = process.env.META_APP_ID, secret = process.env.META_APP_SECRET, verify = process.env.META_VERIFY_TOKEN
+  add({ id: 'app_id', label: 'Meta app ID configured', ok: !isPlaceholder(appId), detail: appId ? `META_APP_ID is set (${appId.slice(0, 4)}…)` : 'META_APP_ID is not set', fix: 'Add META_APP_ID=<your app id> to functions/.env and redeploy functions.' })
+  add({ id: 'app_secret', label: 'Meta app secret saved', ok: !isPlaceholder(secret), detail: isPlaceholder(secret) ? 'META_APP_SECRET is missing or still the placeholder' : 'Saved', fix: 'Run: firebase functions:secrets:set META_APP_SECRET (value from Meta app → App settings → Basic), then redeploy.' })
+  add({ id: 'verify_token', label: 'Webhook verify token saved', ok: !isPlaceholder(verify), detail: isPlaceholder(verify) ? 'META_VERIFY_TOKEN is missing or still the placeholder' : 'Saved', fix: 'Run: firebase functions:secrets:set META_VERIFY_TOKEN with a long random string, redeploy, and enter the same string in Meta → Webhooks.' })
+  const app = resolveAppUrl(process.env.APP_URL)
+  add({ id: 'app_url', label: 'App web address valid', ok: app.valid, detail: `${app.url}${app.problem ? ` (${app.problem})` : ''}`, fix: 'Set APP_URL in functions/.env to the https address that actually loads the app.' })
+  const assets = (await db.doc('metaAssets/main').get()).data()
+  const connected = assets?.status === 'connected'
+  add({ id: 'connected', label: 'Meta account connected', ok: connected, detail: connected ? `Connected as ${assets?.metaUserName ?? 'unknown'}` : assets?.status === 'reauth_required' ? `Reconnect needed: ${assets.statusReason ?? ''}` : 'Not connected', fix: 'Press "Connect Meta account" and sign in with the Facebook account that manages your Page.' })
+  const configured = checks.every(c => c.ok || c.id === 'connected')
+  let permsOk = false, missing: string[] = []
+  if (configured && connected) {
+    const token = MOCK() ? 'mock' : await userToken().catch(() => '')
+    try {
+      await graph('/me', { token, params: { fields: 'id,name' } })
+      add({ id: 'token', label: 'Access token accepted by Meta', ok: true, detail: 'Meta accepted the stored token' })
+      const perms = await graph('/me/permissions', { token }), granted = new Set((perms.data as { permission: string; status: string }[]).filter(p => p.status === 'granted').map(p => p.permission))
+      const must = ['leads_retrieval', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'ads_read'], want = META_SCOPES.filter(x => !must.includes(x))
+      missing = must.filter(x => !granted.has(x)); permsOk = !missing.length
+      add({ id: 'permissions', label: 'Required permissions granted', ok: permsOk, detail: permsOk ? 'All required permissions are granted' : `Missing: ${missing.join(', ')}`, fix: 'Reconnect and approve every permission. For people outside your own app team these need Meta App Review.' })
+      const optional = want.filter(x => !granted.has(x)); if (optional.length) add({ id: 'permissions_optional', label: 'Optional permissions (campaign controls)', ok: false, required: false, detail: `Not granted: ${optional.join(', ')}. Campaign pause/budget controls may be refused by Meta.`, fix: 'Reconnect and approve them if you want campaign controls.' })
+      for (const pg of (assets?.pages ?? []) as { id: string; name: string }[]) {
+        const subs = await graph(`/${pg.id}/subscribed_apps`, { token: MOCK() ? 'mock' : await pageToken(pg.id) }).catch((e: Error) => ({ error: e.message }))
+        const fields = ((subs as any).data ?? []).flatMap((a: any) => a.subscribed_fields ?? [])
+        add({ id: `page_${pg.id}`, label: `Page “${pg.name}” sends leads to this app`, ok: fields.includes('leadgen'), detail: (subs as any).error ? `Could not check: ${(subs as any).error}` : fields.includes('leadgen') ? 'Subscribed to leadgen' : 'Page is not subscribed to leadgen', fix: 'Reconnect Meta (it subscribes your Pages), and make sure the connecting person is an admin of the Page.' })
+      }
+      if (!isPlaceholder(appId) && !isPlaceholder(secret)) {
+        const sub = await graph(`/${appId}/subscriptions`, { token: `${appId}|${secret}` }).catch((e: Error) => ({ error: e.message }))
+        const mine = ((sub as any).data ?? []).find((x: any) => x.object === 'page')
+        const hasLead = (mine?.fields ?? []).some((f: any) => f.name === 'leadgen'), cbOk = mine?.callback_url === expectedWebhookUrl()
+        add({ id: 'app_webhook', label: 'Meta webhook points at this app (Page → leadgen)', ok: !!mine?.active && hasLead && cbOk, detail: (sub as any).error ? `Could not check: ${(sub as any).error}` : !mine ? 'No Page webhook is configured in your Meta app' : `${cbOk ? 'Callback URL correct' : `Callback is ${mine.callback_url}, expected ${expectedWebhookUrl()}`}; leadgen ${hasLead ? 'subscribed' : 'NOT subscribed'}`, fix: `In your Meta app → Webhooks → Page: callback ${expectedWebhookUrl()}, your verify token, subscribe to leadgen.` })
+      }
+    } catch (e: any) {
+      if (isAuthError(e)) await markReauth(e.message)
+      add({ id: 'token', label: 'Access token accepted by Meta', ok: false, detail: `Meta rejected the token: ${String(e.message).slice(0, 160)}`, fix: 'Press "Reconnect Meta".' })
+    }
+  }
+  const [lastEvent, lastLead, anyLead] = await Promise.all([db.collection('metaWebhookEvents').orderBy('receivedAt', 'desc').limit(1).get(), db.collection('metaLeads').orderBy('createdAt', 'desc').limit(1).get(), db.collection('metaLeads').where('status', '!=', 'new').limit(1).get()])
+  const ingestionVerified = !anyLead.empty
+  const ms = (d?: FirebaseFirestore.QueryDocumentSnapshot, f = 'receivedAt') => d?.data()?.[f]?.toMillis?.() ?? null
+  const required = checks.filter(c => c.required !== false)
+  const overall = !configured ? 'not_configured' : !connected ? 'not_connected' : required.every(c => c.ok) ? 'ready' : 'needs_attention'
+  return { overall, ingestionVerified, lastWebhookAt: ms(lastEvent.docs[0]), lastLeadAt: ms(lastLead.docs[0], 'createdAt'), checks,
+    notes: ['While your Meta app is in Development mode, Meta only delivers test webhooks sent from its dashboard; real lead webhooks start after the app is published. Until then use Meta’s Lead Ads Testing Tool, then press “Check for missed leads”.',
+      ingestionVerified ? 'At least one lead has been imported, so the import path has worked end to end.' : 'No lead has been imported yet, so lead import is NOT verified, even if every check above passes.'] }
 })

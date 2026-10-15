@@ -1,3 +1,4 @@
+import { useDoc } from '@/hooks/useFirestore'
 import { useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Download, Smartphone, ArrowRight } from 'lucide-react'
@@ -36,8 +37,18 @@ export function Continue() {
   return null
 }
 
+interface Legal { approved?: boolean; businessName?: string; registeredAddress?: string; companyNumber?: string; contactEmail?: string; icoNumber?: string; icoExempt?: boolean; privacyText?: string }
+/** The owner's approved policy: "## Heading", "- list item" and blank-line paragraphs. Plain text only (nothing is interpreted as HTML). */
+function LegalText({ text }: { text: string }) {
+  const blocks = text.replace(/\r/g, '').split(/\n{2,}/).map(b => b.trim()).filter(Boolean)
+  return <>{blocks.map((b, i) => b.startsWith('## ') ? <h2 key={i} className="mt-8 mb-2 font-display text-xl text-thor-blue">{b.slice(3)}</h2> : b.split('\n').every(l => l.startsWith('- ')) ? <ul key={i} className="list-disc space-y-1 pl-5">{b.split('\n').map((l, j) => <li key={j}>{l.slice(2)}</li>)}</ul> : <p key={i} className="whitespace-pre-line">{b}</p>)}</>
+}
 export function Privacy() {
   const h = 'mt-8 mb-2 font-display text-xl text-thor-blue'
+  const pub = useDoc<{ legal?: Legal }>('platformSettings/public'); const legal = pub.data?.legal
+  if (legal?.approved && legal.privacyText) return (
+    <Shell title="Privacy Policy"><div className="space-y-3 leading-relaxed text-thor-slate"><LegalText text={legal.privacyText} />
+      <h2 className={h}>Who we are</h2><p>{legal.businessName}{legal.companyNumber ? `, company number ${legal.companyNumber}` : ''}<br />{legal.registeredAddress}<br />{legal.contactEmail}{legal.icoNumber ? <><br />ICO registration: {legal.icoNumber}</> : legal.icoExempt ? <><br />Exempt from ICO registration.</> : null}</p></div></Shell>)
   return (
     <Shell title="Privacy Policy">
       <div className="space-y-3 leading-relaxed text-thor-slate">

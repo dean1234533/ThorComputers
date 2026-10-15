@@ -23,7 +23,7 @@ export default function Appointments() {
     return (
       <li className="surface p-6">
         <div className="flex items-start justify-between gap-3"><div><p className="font-display text-lg">{fmt(a.startAt.toDate())}</p><p className="mt-1 flex flex-wrap gap-x-4 text-sm text-thor-text"><span className="flex items-center gap-1"><Clock className="size-4" />{a.durationMinutes} min</span><span className="flex items-center gap-1"><MapPin className="size-4" />{SERVICE_METHODS.find(m => m.id === a.method)?.label}</span><span>{a.reference}</span></p></div>
-          <Badge tone={a.status === 'confirmed' ? 'ok' : a.status === 'cancelled' ? 'bad' : 'warn'}>{a.status.replace('_', ' ')}</Badge></div>
+          <Badge tone={a.status === 'confirmed' || a.status === 'completed' ? 'ok' : a.status === 'cancelled' ? 'bad' : 'warn'}>{a.status.replace('_', ' ')}</Badge></div>
         {a.status === 'reschedule_requested' && a.pendingReschedule && <p className="mt-3 rounded-xl bg-warn/10 p-3 text-sm">{mine ? 'You proposed' : 'Proposed new time:'} <b>{fmt(a.pendingReschedule.startAt.toDate())}</b>{mine && ' (awaiting reply)'}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           {theirs && <><Button size="sm" loading={busy === a.id + 'y'} onClick={() => run(a.id + 'y', () => api.respondReschedule({ appointmentId: a.id, accept: true }), 'New time confirmed.')}>Accept new time</Button><Button size="sm" variant="soft" onClick={() => run(a.id + 'n', () => api.respondReschedule({ appointmentId: a.id, accept: false }), 'Kept the original time.')}>Decline</Button></>}

@@ -41,3 +41,10 @@ test('an unexpected server error shows the reference so support can find the log
   assert.match(m, /EA1B2C3/); assert.match(m, /try again/i); assert.doesNotMatch(m, /INTERNAL|index|FAILED_PRECONDITION/)
   assert.doesNotMatch(userMessage({ code: 'functions/internal', message: 'INTERNAL' }), /INTERNAL/)
 })
+
+test('payment errors explain the real problem and the remedy instead of "refresh the page"', () => {
+  const m = userMessage({ code: 'functions/failed-precondition', message: 'This engineer has not finished payment setup yet. Please contact support or message the engineer.' })
+  assert.match(m, /hasn’t finished setting up payments/); assert.match(m, /message them/i); assert.match(m, /Nothing has been charged/); assert.doesNotMatch(m, /refresh/i)
+  for (const raw of ['Choose an engineer’s quotation first.', 'Approve the extra charge first.', 'Already paid.', 'Payments are not configured yet.', 'The payment provider rejected the request.', 'Please complete payment before booking your appointment.', 'This repair is already finished, so its appointment can’t be changed.']) assert.doesNotMatch(userMessage({ code: 'functions/failed-precondition', message: raw }), /refresh/i, raw)
+  assert.match(userMessage({ code: 'functions/failed-precondition', message: 'At most £5.00 can still be refunded.' }), /£5\.00/)
+})

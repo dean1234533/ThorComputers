@@ -1,7 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https'
 import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
-import { db, FieldValue, Timestamp, HttpsError, callable, requireRole, APP_URL, REGION } from './core'
+import { db, FieldValue, Timestamp, HttpsError, callable, requireRole, LINKS, REGION } from './core'
 import { sendEmail, p } from './email'
 import { advanceLeadDoc } from './leads'
 
@@ -46,7 +46,7 @@ export const wpIntake = onRequest({ region: REGION, cors: false }, async (req, r
     throw e
   }
   await db.collection('integrationEvents').add({ type: 'wp.intake', enquiryId: id, createdAt: FieldValue.serverTimestamp() })
-  const url = `${APP_URL}/continue?e=${id}&t=${token}`
+  const url = LINKS.continueLink(id, token)
   await sendEmail({ to: fields.email, subject: 'Confirm your Thor Computer repair request', heading: `Thanks, ${fields.first_name}`,
     html: `<p>We received your repair enquiry${fields.brand ? ` for your <b>${p(fields.brand)} ${p(fields.model)}</b>` : ''}.</p><p>Create a free account or sign in to confirm the details. Your request will then be sent to approved engineers, who will send you quotes to compare. Nothing is shared with engineers until you confirm.</p>`,
     cta: { label: 'Confirm my request', url } }).catch(e => console.error('wp intake email failed', e.message))

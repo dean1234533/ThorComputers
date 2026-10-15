@@ -6,6 +6,7 @@ import { HttpsError, CallableRequest, onCall } from 'firebase-functions/v2/https
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { z, ZodTypeAny } from 'zod'
 import { randomBytes } from 'node:crypto'
+import { resolveAppUrl, appLinks } from './app-url'
 import { sendEmail } from './email'
 
 initializeApp()
@@ -16,11 +17,14 @@ export const messaging = getMessaging()
 export { FieldValue, Timestamp, HttpsError }
 
 export const REGION = 'europe-west2'
-export const APP_URL = process.env.APP_URL ?? 'https://app.thorcomputer.com'
+const appUrl = resolveAppUrl(process.env.APP_URL)
+if (!appUrl.valid || appUrl.problem) console.error(JSON.stringify({ severity: appUrl.valid ? 'WARNING' : 'ERROR', message: 'APP_URL configuration', problem: appUrl.problem, using: appUrl.url }))
+export const APP_URL = appUrl.url
+export const LINKS = appLinks(APP_URL)
 /** The Firebase client SDK serialises `undefined` as `null`, which zod's .optional() rejects ("Expected object, received null"). Treat null as "not provided". */
 export const stripNulls = (v: unknown): unknown => Array.isArray(v) ? v.map(stripNulls)
   : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null).map(([k, x]) => [k, stripNulls(x)])) : v
-export const callable = <T extends ZodTypeAny, R>(schema: T, fn: (req: CallableRequest, data: z.infer<T>) => Promise<R>, opts: { secrets?: string[] } = {}) =>
+export const callable = <T extends ZodTypeAny, R>(schema: T, fn: (req: CallableRequest, data: z.infer<T>) => Promise<R>, opts: { secrets?: string[]; maxInstances?: number; timeoutSeconds?: number } = {}) =>
   onCall({ region: REGION, enforceAppCheck: false, cors: true, ...opts }, async (req) => {
     const parsed = schema.safeParse(stripNulls(req.data ?? {}))
     if (!parsed.success) throw new HttpsError('invalid-argument', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '))

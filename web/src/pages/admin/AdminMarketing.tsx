@@ -4,7 +4,7 @@ import { limit, orderBy } from 'firebase/firestore'
 import { PlugZap, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
-import { api, errMsg } from '@/lib/api'
+import { api, errMsg, MetaSelfTest } from '@/lib/api'
 import { gbp } from '@/types/domain'
 import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Section, Sheet, useToast } from '@/components/ui'
 
@@ -21,7 +21,7 @@ export default function AdminMarketing() {
   const assets = useDoc<Assets>(enabled ? 'metaAssets/main' : null), health = useDoc<{ ok: boolean; detail: string; at?: { toDate(): Date } }>(enabled ? 'integrationHealth/meta' : null)
   const camps = useQuery<Camp>(enabled ? 'metaCampaigns' : null, () => [limit(200)], [enabled]), routing = useQuery<{ enabled: boolean }>(enabled ? 'campaignRouting' : null, () => [limit(200)], [enabled])
   const forms = useQuery<{ name: string; status: string }>(enabled ? 'metaLeadForms' : null, () => [limit(100)], [enabled]), events = useQuery<{ leadCount: number; status: string; receivedAt?: { toDate(): Date } }>(enabled ? 'metaWebhookEvents' : null, () => [orderBy('receivedAt', 'desc'), limit(8)], [enabled])
-  const [stats, setStats] = useState<any>(null), [from, setFrom] = useState(''), [to, setTo] = useState(''), [busy, setBusy] = useState(''), [campSheet, setCampSheet] = useState<string | null>(null), [mapForm, setMapForm] = useState<string | null>(null)
+  const [selfTest, setSelfTest] = useState<MetaSelfTest | null>(null), [stats, setStats] = useState<any>(null), [from, setFrom] = useState(''), [to, setTo] = useState(''), [busy, setBusy] = useState(''), [campSheet, setCampSheet] = useState<string | null>(null), [mapForm, setMapForm] = useState<string | null>(null)
 
   useEffect(() => { const m = qs.get('meta'); if (m) { toast(m === 'connected' ? 'ok' : 'bad', m === 'connected' ? 'Meta connected. Page and ad accounts imported.' : 'Meta connection was not completed.'); qs.delete('meta'); setQs(qs, { replace: true }) } }, [])   // eslint-disable-line
   const load = () => api.adminMarketingStats({ from: from || undefined, to: to || undefined }).then(setStats).catch(e => toast('bad', errMsg(e)))
@@ -39,7 +39,8 @@ export default function AdminMarketing() {
           <div className="flex flex-wrap items-center gap-3"><PlugZap className="size-5 text-thor-blue" />
             <Badge tone={connected ? 'ok' : reauth ? 'bad' : 'neutral'}>{connected ? 'Connected' : reauth ? 'Reconnect needed' : 'Not connected'}</Badge>
             {a?.metaUserName && <span className="text-thor-text">as {a.metaUserName}</span>}
-            {health.data && <Badge tone={health.data.ok ? 'ok' : 'bad'}>Integration health: {health.data.ok ? 'OK' : 'problem'}</Badge>}</div>
+            {health.data && <Badge tone={health.data.ok ? 'neutral' : 'bad'}>Last Meta API call: {health.data.ok ? 'succeeded' : 'failed'}</Badge>}</div>
+          <ConnectionCheck result={selfTest} busy={busy === 'check'} onRun={() => run('check', async () => setSelfTest(await api.metaSelfTest({})), 'Connection check finished.')} />
           {reauth && <p className="rounded-xl bg-bad/10 p-3 text-bad">The Meta access expired or a permission was revoked: {a?.statusReason}. Reconnect to resume lead imports.</p>}
           {health.data && !health.data.ok && <p className="text-thor-text">Last problem: {health.data.detail}</p>}
           {connected && <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-thor-text">Facebook Pages</p><ul>{(a?.pages ?? []).map(p => <li key={p.id}>{p.name} {a?.subscribedPages?.includes(p.id) ? <Badge tone="ok">Lead webhook on</Badge> : <Badge tone="warn">Not subscribed</Badge>}</li>)}</ul></div>
@@ -117,4 +118,17 @@ function SettingsPanel() {
       <Input label="Max daily budget (£)" type="number" min="1" value={v.maxDailyBudgetPence / 100} onChange={e => setV({ ...v, maxDailyBudgetPence: Math.round(Number(e.target.value) * 100) })} hint="Budget changes above this are refused." />
       <Input label="Max single budget change (%)" type="number" min="1" max="500" value={v.maxBudgetChangePct} onChange={e => setV({ ...v, maxBudgetChangePct: Number(e.target.value) })} /></div>
     <Button onClick={save} loading={busy}>Save settings</Button></div></Section>
+}
+
+const OVERALL: Record<MetaSelfTest['overall'], { tone: 'ok' | 'warn' | 'bad' | 'neutral'; text: string }> = {
+  not_configured: { tone: 'bad', text: 'Not configured: required settings are missing' }, not_connected: { tone: 'neutral', text: 'Configured, but no Meta account is connected' },
+  needs_attention: { tone: 'warn', text: 'Connected, but something Meta needs is not right' }, ready: { tone: 'ok', text: 'Set up correctly' },
+}
+function ConnectionCheck({ result, busy, onRun }: { result: MetaSelfTest | null; busy: boolean; onRun: () => void }) {
+  const o = result ? OVERALL[result.overall] : null
+  return <div className="rounded-2xl bg-paper p-4"><div className="flex flex-wrap items-center gap-3"><Button size="sm" variant="soft" loading={busy} onClick={onRun}>Run connection check</Button>
+    {o && <Badge tone={o.tone}>{o.text}</Badge>}{result && <Badge tone={result.ingestionVerified ? 'ok' : 'warn'}>{result.ingestionVerified ? 'Lead import verified' : 'Lead import NOT verified yet'}</Badge>}</div>
+    {!result && <p className="mt-2 text-thor-text">This asks Meta directly about your token, permissions, Page subscriptions and webhook. A page loading is not proof that anything works.</p>}
+    {result && <><ul className="mt-3 space-y-2">{result.checks.map(c => <li key={c.id} className="flex gap-2"><span aria-hidden className={c.ok ? 'text-ok' : c.required === false ? 'text-warn' : 'text-bad'}>{c.ok ? '✓' : c.required === false ? '!' : '✗'}</span><div><p className="font-medium">{c.label}</p><p className="text-thor-text">{c.detail}</p>{!c.ok && c.fix && <p className="text-thor-blue">What to do: {c.fix}</p>}</div></li>)}</ul>
+      <p className="mt-3 text-xs text-thor-text">{result.notes.join(' ')}{result.lastWebhookAt ? ` Last webhook: ${new Date(result.lastWebhookAt).toLocaleString('en-GB')}.` : ' No webhook received yet.'}{result.lastLeadAt ? ` Last lead: ${new Date(result.lastLeadAt).toLocaleString('en-GB')}.` : ' No lead received yet.'}</p></>}</div>
 }

@@ -34,12 +34,21 @@ export function decryptToken(blob: string, secret: string): string {
 export interface FinanceSettings { commissionBps: number; requirePaymentBeforeBooking: boolean; refundPolicy: string; cancellationPolicy: string }
 export interface MarketingSettings { requiredFields: string[]; defaultFeedsMarketplace: boolean; attributionWindowDays: number; maxDailyBudgetPence: number; maxBudgetChangePct: number; autoImport: boolean }
 export interface MarketplaceSettings { newRequestsEnabled: boolean; biddingEnabled: boolean; maxQuotesPerJob: number; maxQuoteValidityDays: number }
-export interface AiSettings { enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge: string; model?: string }
+export interface AiSettings {
+  enabled: boolean                 // show the assistant at all
+  aiFallbackEnabled: boolean       // allow the (paid) AI for questions the rules cannot answer; the guided assistant keeps working when off
+  welcome: string; escalation: string; knowledge: string; model?: string
+  dailyLimit: number               // messages per customer per day (rules and AI)
+  aiDailyLimit: number             // AI fallbacks per customer per day
+  globalAiDailyLimit: number       // AI fallbacks across all customers per day: the spending safeguard
+  aiTimeoutMs: number; costInMicrosPer1k: number; costOutMicrosPer1k: number   // cost rates are estimates in micro-pounds per 1,000 tokens, editable
+  faqOverrides?: Record<string, { answer?: string; enabled?: boolean }>; customFaqs?: { id: string; questions: string[]; answer: string }[]
+}
 
 export const FINANCE_DEFAULTS: FinanceSettings = { commissionBps: 1500, requirePaymentBeforeBooking: false, refundPolicy: 'Refunds follow the engineer’s agreed terms and Thor Computer’s marketplace policy.', cancellationPolicy: '' }
 export const MARKETING_DEFAULTS: MarketingSettings = { requiredFields: ['name', 'email', 'postcode', 'problem'], defaultFeedsMarketplace: true, attributionWindowDays: 30, maxDailyBudgetPence: 5000, maxBudgetChangePct: 50, autoImport: true }
 export const MARKETPLACE_DEFAULTS: MarketplaceSettings = { newRequestsEnabled: true, biddingEnabled: true, maxQuotesPerJob: 10, maxQuoteValidityDays: 30 }
-export const AI_DEFAULTS: AiSettings = { enabled: true, welcome: 'Hi, I’m the Thor Computer assistant. I can help you describe a repair, understand quotes, or find support.', dailyLimit: 40, escalation: 'Please contact our support team.', knowledge: '' }
+export const AI_DEFAULTS: AiSettings = { enabled: true, aiFallbackEnabled: true, welcome: 'Hi, I’m the Thor Computer assistant. I can help you describe a repair, understand quotes, or find support.', dailyLimit: 150, aiDailyLimit: 10, globalAiDailyLimit: 300, aiTimeoutMs: 8000, costInMicrosPer1k: 80, costOutMicrosPer1k: 320, escalation: '', knowledge: '' }
 
 export async function getSettings<T>(docId: string, defaults: T): Promise<T> {
   const d = (await db.doc(`platformSettings/${docId}`).get()).data()

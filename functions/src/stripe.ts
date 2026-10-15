@@ -1,7 +1,7 @@
 import { onRequest } from 'firebase-functions/v2/https'
 import { z } from 'zod'
 import { createHash, randomBytes } from 'node:crypto'
-import { db, callable, requireRole, requireApprovedEngineer, requireVerified, requirePerm, requireSuperAdmin, notify, notifyAdmins, audit, FieldValue, Timestamp, HttpsError, APP_URL, REGION } from './core'
+import { db, callable, requireRole, requireApprovedEngineer, requireVerified, requirePerm, requireSuperAdmin, notify, notifyAdmins, audit, FieldValue, Timestamp, HttpsError, APP_URL, LINKS, REGION } from './core'
 import { MOCK, formEncode, getFinanceSettings, health } from './external'
 import { commissionSplit, commissionRefund, MAX_COMMISSION_BPS } from './money'
 import { verifyStripeSignature } from './integrations-domain'
@@ -15,6 +15,18 @@ import { p } from './email'
  *   - the engineer's money moves to their connected account on payment; Stripe pays it out to their bank on their own schedule. */
 const STRIPE_SECRETS = ['STRIPE_SECRET_KEY']
 type Params = Record<string, unknown>
+
+/** What the engineer is still owed after refunds. A refund returns Thor's commission proportionally (commissionRefundedPence) and the rest comes out of the engineer's share. */
+export const engineerRefundedPence = (t: { engineerSharePence: number; refundedPence?: number; commissionRefundedPence?: number }) =>
+  Math.min(t.engineerSharePence, Math.max(0, (t.refundedPence ?? 0) - (t.commissionRefundedPence ?? 0)))
+export const engineerRemainingPence = (t: { engineerSharePence: number; refundedPence?: number; commissionRefundedPence?: number }) => t.engineerSharePence - engineerRefundedPence(t)
+/** Human label for the payout column: a fully reversed transaction is never "pending". */
+export function payoutState(t: { status: string; payoutStatus?: string; engineerSharePence: number; refundedPence?: number; commissionRefundedPence?: number }): string {
+  const left = engineerRemainingPence(t), reduced = engineerRefundedPence(t) > 0
+  if (t.status === 'refunded' || left === 0) return 'reversed'
+  if (t.payoutStatus === 'transferred') return reduced ? 'transferred (reduced)' : 'transferred'
+  return reduced ? 'pending (reduced)' : 'pending'
+}
 
 const mockId = (prefix: string, seed: string) => `${prefix}_mock_${createHash('sha256').update(seed).digest('hex').slice(0, 14)}`
 function mockStripe(method: string, path: string, params: Params): any {
@@ -53,7 +65,9 @@ export const stripeConnectOnboard = callable(z.object({}), async (req) => {
     accountId = acct.id as string
     await aRef.set({ engineerId: c.uid, accountId, chargesEnabled: false, payoutsEnabled: false, detailsSubmitted: false, createdAt: FieldValue.serverTimestamp() }, { merge: true })
   }
-  const link = await stripeApi('POST', '/account_links', { account: accountId, type: 'account_onboarding', refresh_url: `${APP_URL}/settings?stripe=refresh`, return_url: `${APP_URL}/settings?stripe=return` })
+  const urls = { refresh_url: LINKS.onboardingRefresh(), return_url: LINKS.onboardingReturn() }
+  const link = await stripeApi('POST', '/account_links', { account: accountId, type: 'account_onboarding', ...urls })
+  await aRef.set({ lastOnboardingUrls: urls }, { merge: true })
   return { url: link.url as string }
 }, { secrets: STRIPE_SECRETS })
 
@@ -103,12 +117,13 @@ export const createCheckout = callable(z.object({ jobId: z.string(), additionalC
     mode: 'payment', client_reference_id: id, customer_email: String(c.token.email ?? ''), metadata: meta,
     line_items: [{ quantity: 1, price_data: { currency: 'gbp', unit_amount: totalPence, product_data: { name: label } } }],
     payment_intent_data: { ...(commissionPence > 0 ? { application_fee_amount: commissionPence } : {}), transfer_data: { destination: acct.accountId }, metadata: meta, receipt_email: String(c.token.email ?? ''), description: label },
-    success_url: `${APP_URL}/customer/repairs/${d.jobId}?paid=1`, cancel_url: `${APP_URL}/customer/repairs/${d.jobId}?paid=0`,
+    success_url: LINKS.checkoutSuccess(d.jobId), cancel_url: LINKS.checkoutCancel(d.jobId),
   })
+  const returnUrls = { successUrl: LINKS.checkoutSuccess(d.jobId), cancelUrl: LINKS.checkoutCancel(d.jobId) }
   await tRef.set({
     jobId: d.jobId, reference: job.reference, customerId: c.uid, engineerId: job.selectedEngineerId, quoteId: job.acceptedQuoteId, additionalChargeId: d.additionalChargeId ?? null,
     currency: 'GBP', totalPence, commissionBps: bps, commissionPence, engineerSharePence, status: 'checkout_created', refundedPence: 0, commissionRefundedPence: 0, stripeFeePence: null,
-    payoutStatus: 'pending', stripe: { checkoutSessionId: session.id, paymentIntentId: session.payment_intent ?? null }, attribution: job.attribution ?? null,
+    payoutStatus: 'pending', stripe: { checkoutSessionId: session.id, paymentIntentId: session.payment_intent ?? null, ...returnUrls }, attribution: job.attribution ?? null,
     createdAt: existing?.createdAt ?? FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true })
   return { alreadyPaid: false, url: session.url as string }
@@ -182,15 +197,16 @@ export const adminFinanceStats = callable(z.object({ from: z.string().regex(/^\d
   const docs = (await q.limit(2000).get()).docs.map(x => ({ id: x.id, ...x.data() as any }))
   const sum = (f: (t: any) => number) => docs.reduce((a, t) => a + (f(t) || 0), 0)
   const gross = sum(t => t.totalPence), commission = sum(t => t.commissionPence), commissionRefunded = sum(t => t.commissionRefundedPence), fees = sum(t => t.stripeFeePence), refunds = sum(t => t.refundedPence)
-  const pendingPayouts = docs.filter(t => t.payoutStatus !== 'transferred' && ['paid', 'partially_refunded'].includes(t.status))
+  const live = docs.filter(t => ['paid', 'partially_refunded', 'disputed'].includes(t.status))
+  const pendingPayouts = live.filter(t => t.payoutStatus !== 'transferred' && engineerRemainingPence(t) > 0)
   const awaiting = await db.collection('transactions').where('status', 'in', ['checkout_created', 'payment_failed']).count().get()
   const disputes = await db.collection('paymentDisputes').where('resolution', '==', null).count().get().catch(() => null)
   return {
-    gross, commission, commissionRefunded, engineerShare: sum(t => t.engineerSharePence), stripeFees: fees, refunds,
-    netPlatformRevenue: commission - commissionRefunded - fees, pendingPayoutPence: pendingPayouts.reduce((a, t) => a + t.engineerSharePence, 0), pendingPayoutCount: pendingPayouts.length,
-    completedPayoutPence: sum(t => t.payoutStatus === 'transferred' ? t.engineerSharePence : 0), outstandingPaymentCount: awaiting.data().count, openDisputes: disputes?.data().count ?? 0, count: docs.length,
-    rows: docs.slice(0, 300).map(t => ({ id: t.id, reference: t.reference, paidAt: t.paidAt?.toMillis?.() ?? null, totalPence: t.totalPence, commissionPence: t.commissionPence, commissionBps: t.commissionBps, engineerSharePence: t.engineerSharePence,
-      stripeFeePence: t.stripeFeePence, refundedPence: t.refundedPence, status: t.status, payoutStatus: t.payoutStatus, source: t.attribution?.source ?? null, campaignId: t.attribution?.campaignId ?? null })),
+    gross, commission, commissionRefunded, engineerShare: sum(t => t.engineerSharePence), engineerShareRefunded: sum(t => engineerRefundedPence(t)), engineerRemaining: sum(t => engineerRemainingPence(t)), stripeFees: fees, refunds,
+    netPlatformRevenue: commission - commissionRefunded - fees, pendingPayoutPence: pendingPayouts.reduce((a, t) => a + engineerRemainingPence(t), 0), pendingPayoutCount: pendingPayouts.length,
+    completedPayoutPence: sum(t => t.payoutStatus === 'transferred' ? engineerRemainingPence(t) : 0), outstandingPaymentCount: awaiting.data().count, openDisputes: disputes?.data().count ?? 0, count: docs.length,
+    rows: docs.slice(0, 300).map(t => ({ id: t.id, reference: t.reference, paidAt: t.paidAt?.toMillis?.() ?? null, totalPence: t.totalPence, commissionPence: t.commissionPence, commissionBps: t.commissionBps, engineerSharePence: t.engineerSharePence, engineerRefundedPence: engineerRefundedPence(t), engineerRemainingPence: engineerRemainingPence(t),
+      stripeFeePence: t.stripeFeePence, refundedPence: t.refundedPence, commissionRefundedPence: t.commissionRefundedPence ?? 0, status: t.status, payoutStatus: t.payoutStatus, payoutState: payoutState(t), source: t.attribution?.source ?? null, campaignId: t.attribution?.campaignId ?? null })),
   }
 })
 
@@ -302,7 +318,7 @@ export async function handleStripeEvent(evt: Evt) {
         await doc.ref.update({ status: 'disputed', disputeId: o.id, updatedAt: FieldValue.serverTimestamp() })
         await notifyAdmins('payments.manage', { category: 'admin', dedupeKey: `dispute:${o.id}`, title: 'Payment dispute opened', body: `A chargeback was raised on ${t!.reference}. Respond in Stripe before the deadline.`, link: '/admin/finance' })
       }
-      if (doc && evt.type === 'charge.dispute.closed') await doc.ref.update({ status: o.status === 'won' ? 'paid' : 'disputed', updatedAt: FieldValue.serverTimestamp() })
+      if (doc && evt.type === 'charge.dispute.closed') { const r = (t?.refundedPence ?? 0); await doc.ref.update({ status: o.status === 'won' ? (r >= (t?.totalPence ?? 0) ? 'refunded' : r > 0 ? 'partially_refunded' : 'paid') : 'disputed', updatedAt: FieldValue.serverTimestamp() }) }
       return
     }
     case 'account.updated': {

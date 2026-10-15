@@ -106,10 +106,12 @@ export const cancelAppointment = callable(z.object({ appointmentId: z.string(), 
     const { r, a, other } = await participantAppointment(tx, c.uid, d.appointmentId)
     if (!['confirmed', 'reschedule_requested'].includes(a.status)) throw new HttpsError('failed-precondition', `Appointment is already ${a.status}.`)
     if (a.startAt.toMillis() < Date.now()) throw new HttpsError('failed-precondition', 'This appointment has already started.')
+    const jr = db.doc(`repairRequests/${a.jobId}`), job = (await tx.get(jr)).data()          // read before any write
+    if (job && ['completed', 'closed', 'cancelled'].includes(job.status)) throw new HttpsError('failed-precondition', 'This repair is already finished, so its appointment can’t be changed.')
     freeSlots(tx, a.engineerId, a.slotKeys)
     tx.update(r, { status: 'cancelled', cancelledBy: c.uid, cancelReason: d.reason, updatedAt: FieldValue.serverTimestamp() })
-    const jr = db.doc(`repairRequests/${a.jobId}`)
-    tx.update(jr, { status: 'engineer_selected', statusHistory: FieldValue.arrayUnion({ status: 'engineer_selected', at: Timestamp.now(), by: c.uid, note: 'appointment cancelled' }), updatedAt: FieldValue.serverTimestamp() })
+    // Only a repair that is actually waiting on this appointment goes back to "engineer selected". A job that has moved on (in progress, awaiting parts, ...) or finished keeps its state.
+    if (job?.status === 'appointment_scheduled') tx.update(jr, { status: 'engineer_selected', statusHistory: FieldValue.arrayUnion({ status: 'engineer_selected', at: Timestamp.now(), by: c.uid, note: 'appointment cancelled' }), updatedAt: FieldValue.serverTimestamp() })
     return { other, reference: a.reference as string, isCustomer: a.customerId === c.uid }
   })
   await notify({ userId: out.other, category: 'bookings', dedupeKey: `apt-cancel:${d.appointmentId}`, title: 'Appointment cancelled', body: `The appointment for ${out.reference} was cancelled.`, link: out.isCustomer ? '/engineer/appointments' : '/customer/appointments' })

@@ -4,15 +4,9 @@ import { canTransition, requiredSpecsFor, quoteTotalPence, JobStatus } from './d
 import { geocode, miles, coarse } from './geo'
 import { p } from './email'
 import { verifyEnquiry } from './wordpress'
+import { DEVICES, METHODS, METHODS_FOR } from './catalog'
 import { getFinanceSettings, getMarketplaceSettings } from './external'
 import { advanceLeadDoc, advanceLeadForJob } from './leads'
-
-const DEVICES = ['laptop', 'desktop', 'gaming_pc', 'mac', 'phone', 'tablet', 'printer', 'other'] as const
-const METHODS = ['home', 'office', 'remote', 'collection', 'workshop'] as const
-const METHODS_FOR: Record<string, string[]> = {
-  laptop: [...METHODS], desktop: [...METHODS], gaming_pc: [...METHODS], mac: [...METHODS], other: [...METHODS],
-  phone: ['collection', 'workshop', 'home'], tablet: ['collection', 'workshop', 'home'], printer: ['home', 'office', 'collection', 'workshop'],
-}
 
 export const RequestInput = z.object({
   requestKey: z.string().min(8).max(64).regex(/^[\w-]+$/),     // client-generated idempotency key
@@ -214,12 +208,13 @@ export const changeJobStatus = callable(z.object({ jobId: z.string(), to: z.enum
     if (from === d.to) return { noop: true as const }
     if (!canTransition(actor, from, d.to)) throw new HttpsError('failed-precondition', `${actor} cannot move a job from ${from} to ${d.to}.`)
     // Firestore requires every read before the first write.
-    const cancelling = d.to === 'cancelled'
-    const apps = cancelling ? await tx.get(db.collection('appointments').where('jobId', '==', d.jobId).where('status', 'in', ['confirmed', 'reschedule_requested'])) : null
+    const cancelling = d.to === 'cancelled', finishing = cancelling || d.to === 'completed' || d.to === 'closed'
+    const apps = finishing ? await tx.get(db.collection('appointments').where('jobId', '==', d.jobId).where('status', 'in', ['confirmed', 'reschedule_requested'])) : null
     const liveQuotes = cancelling && from === 'open' ? await tx.get(db.collection('repairQuotes').where('jobId', '==', d.jobId).where('status', '==', 'submitted')) : null
     tx.update(jRef, { status: d.to, statusHistory: FieldValue.arrayUnion({ status: d.to, at: Timestamp.now(), by: c.uid, ...(d.note ? { note: d.note } : {}) }), updatedAt: FieldValue.serverTimestamp(), ...(d.to === 'completed' ? { completedAt: FieldValue.serverTimestamp() } : {}) })
     if (d.to === 'completed' && j.selectedEngineerId) tx.set(db.doc(`engineerProfiles/${j.selectedEngineerId}`), { completedJobs: FieldValue.increment(1) }, { merge: true })
-    apps?.docs.forEach(a => { tx.update(a.ref, { status: 'cancelled', cancelledBy: c.uid, updatedAt: FieldValue.serverTimestamp() }); (a.data().slotKeys as string[]).forEach(k => tx.delete(db.doc(`appointmentSlots/${a.data().engineerId}_${k}`))) })
+    // A finished repair must not keep a live appointment: cancelled repairs cancel it, completed/closed repairs mark it completed; either way its slots are released and reminders stop.
+    apps?.docs.forEach(a => { tx.update(a.ref, cancelling ? { status: 'cancelled', cancelledBy: c.uid, updatedAt: FieldValue.serverTimestamp() } : { status: 'completed', completedWithJob: true, pendingReschedule: null, updatedAt: FieldValue.serverTimestamp() }); (a.data().slotKeys as string[]).forEach(k => tx.delete(db.doc(`appointmentSlots/${a.data().engineerId}_${k}`))) })
     liveQuotes?.docs.forEach(q => tx.update(q.ref, { status: 'declined' }))
     return { noop: false as const, j, actor, from }
   })

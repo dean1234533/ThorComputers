@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { db, auth, callable, requireRole, requirePerm, audit, FieldValue, Timestamp, adminMfaMode } from './core'
+import { engineerRemainingPence } from './stripe'
+import { db, auth, callable, requireRole, requirePerm, requireSuperAdmin, HttpsError, audit, FieldValue, Timestamp, adminMfaMode } from './core'
 
 export const adminStats = callable(z.object({}), async (req) => {
   const caller = requirePerm(req, 'reports.view')
@@ -27,7 +28,7 @@ export const adminStats = callable(z.object({}), async (req) => {
   if (has('finance.view')) {
     const [tx, outstanding, disputed] = await Promise.all([db.collection('transactions').where('status', 'in', ['paid', 'partially_refunded', 'refunded', 'disputed']).limit(2000).get(), c(db.collection('transactions').where('status', 'in', ['checkout_created', 'payment_failed'])), c(db.collection('transactions').where('status', '==', 'disputed'))])
     const sum = (f: (t: any) => number) => tx.docs.reduce((a, x) => a + (f(x.data()) || 0), 0)
-    finance = { transactionValuePence: sum(t => t.totalPence), commissionPence: sum(t => t.commissionPence - (t.commissionRefundedPence ?? 0)), engineerPayoutPence: sum(t => t.payoutStatus === 'transferred' ? t.engineerSharePence : 0), outstandingPayments: outstanding, disputedTransactions: disputed,
+    finance = { transactionValuePence: sum(t => t.totalPence), commissionPence: sum(t => t.commissionPence - (t.commissionRefundedPence ?? 0)), engineerPayoutPence: sum(t => t.payoutStatus === 'transferred' ? engineerRemainingPence(t) : 0), outstandingPayments: outstanding, disputedTransactions: disputed,
       advertisingRevenuePence: sum(t => t.attribution?.source === 'meta' ? t.totalPence : 0) }
   }
   const [cancelled] = await Promise.all([c(db.collection('repairRequests').where('status', '==', 'cancelled'))])
@@ -70,5 +71,20 @@ export const saveMarketplaceSettings = callable(z.object({ newRequestsEnabled: z
   const c = requirePerm(req, 'settings.edit')
   await db.doc('platformSettings/marketplace').set({ ...d, updatedAt: FieldValue.serverTimestamp(), updatedBy: c.uid }, { merge: true })
   await audit(c.uid, 'marketplace.settings', 'platformSettings/marketplace', d)
+  return { ok: true }
+})
+
+/** The owner supplies the approved privacy policy and business details. Nothing is invented here: until `approved` is set with all required details, the app keeps its "draft for legal review" notice. */
+export const saveLegalSettings = callable(z.object({
+  businessName: z.string().trim().max(120), registeredAddress: z.string().trim().max(300), companyNumber: z.string().trim().max(20).optional().default(''), contactEmail: z.string().trim().max(120),
+  icoNumber: z.string().trim().max(30).optional().default(''), icoExempt: z.boolean().optional().default(false), privacyText: z.string().max(30000), approved: z.boolean(),
+}), async (req, d) => {
+  const c = requireSuperAdmin(req)
+  if (d.approved) {
+    const missing = [!d.businessName && 'business name', !d.registeredAddress && 'registered address', !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.contactEmail) && 'contact email', (!d.icoNumber && !d.icoExempt) && 'ICO registration number (or confirm an exemption)', d.privacyText.trim().length < 200 && 'the full privacy policy text'].filter(Boolean)
+    if (missing.length) throw new HttpsError('failed-precondition', `To publish the policy, add: ${missing.join(', ')}.`)
+  }
+  await db.doc('platformSettings/public').set({ legal: { ...d, approvedBy: d.approved ? c.uid : null, approvedAt: d.approved ? FieldValue.serverTimestamp() : null, updatedAt: FieldValue.serverTimestamp() } }, { merge: true })
+  await audit(c.uid, 'legal.settings', 'platformSettings/public', { approved: d.approved, businessName: d.businessName })
   return { ok: true }
 })

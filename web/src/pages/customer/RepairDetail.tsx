@@ -57,7 +57,7 @@ export default function RepairDetail() {
             <div className="mt-3"><ContactCard c={priv.data?.engineerContact} who="engineer" messageTo={`/messages/${job.acceptedQuoteId}`} /></div>
             <Link to={`/messages/${job.acceptedQuoteId}`} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-thor-blue"><MessageSquare className="size-4" />Message your engineer</Link></Section>}
 
-          {job.acceptedQuoteId && !['cancelled'].includes(job.status) && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} /></Section>}
+          {job.acceptedQuoteId && !['cancelled'].includes(job.status) && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} messageTo={`/messages/${job.acceptedQuoteId}`} /></Section>}
 
           {job.status === 'engineer_selected' && <Section title="Book your appointment"><BookingPanel jobId={job.id} needsAddress={needsAddress} onBooked={() => {}} /></Section>}
 
