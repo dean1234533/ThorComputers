@@ -4,6 +4,8 @@ import { canTransition, requiredSpecsFor, quoteTotalPence, JobStatus } from './d
 import { geocode, miles, coarse } from './geo'
 import { p } from './email'
 import { verifyEnquiry } from './wordpress'
+import { getFinanceSettings, getMarketplaceSettings } from './external'
+import { advanceLeadDoc, advanceLeadForJob } from './leads'
 
 const DEVICES = ['laptop', 'desktop', 'gaming_pc', 'mac', 'phone', 'tablet', 'printer', 'other'] as const
 const METHODS = ['home', 'office', 'remote', 'collection', 'workshop'] as const
@@ -26,11 +28,12 @@ export const RequestInput = z.object({
   accessNotes: z.string().trim().max(300).optional().default(''),
   preferredDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(5).default([]),
   photoPaths: z.array(z.string()).max(6).default([]),
-  source: z.enum(['app', 'wordpress']).default('app'),
+  source: z.enum(['app', 'wordpress', 'meta']).default('app'),
   enquiry: z.object({ id: z.string().max(80), token: z.string().max(80) }).optional(),   // set when continuing a WordPress enquiry
 })
 
-export async function createRequestFor(customerId: string, d: z.infer<typeof RequestInput>) {
+export async function createRequestFor(customerId: string, d: z.infer<typeof RequestInput>, attribution: Record<string, unknown> | null = null) {
+  if (!(await getMarketplaceSettings()).newRequestsEnabled) throw new HttpsError('failed-precondition', 'New repair requests are paused for a short while. Please try again later.')
   const bad = d.serviceMethods.find(m => !METHODS_FOR[d.device.type].includes(m))
   if (bad) throw new HttpsError('invalid-argument', `"${bad}" is not available for this device type.`)
   if (d.photoPaths.some(x => !x.startsWith(`requests/${customerId}/`))) throw new HttpsError('invalid-argument', 'Invalid photo reference.')
@@ -52,7 +55,7 @@ export async function createRequestFor(customerId: string, d: z.infer<typeof Req
     issues: d.issues, summary: d.description.slice(0, 140), description: d.description, startedAt: d.startedAt, urgency: d.urgency,
     serviceMethods: d.serviceMethods, requiredSpecs, photoPaths: d.photoPaths, preferredDates: d.preferredDates,
     location: { area: geo.area, outcode: geo.outcode, lat: coarse(geo.lat), lng: coarse(geo.lng) },   // approximate only
-    quoteCount: 0, source: d.source, statusHistory: [{ status: 'open', at: Timestamp.now(), by: customerId }],
+    quoteCount: 0, source: d.source, attribution, paymentStatus: 'unpaid', statusHistory: [{ status: 'open', at: Timestamp.now(), by: customerId }],
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
   })
   batch.create(db.doc(`repairRequests/${jobId}/private/details`), {   // never exposed to bidders
@@ -80,8 +83,10 @@ export const createRepairRequest = callable(RequestInput, async (req, d) => {
   if (!d.enquiry) return createRequestFor(c.uid, d)
   const enq = await verifyEnquiry(d.enquiry.id, d.enquiry.token, String(c.token.email).toLowerCase())
   // Deterministic key => the same WordPress enquiry can only ever produce one repair request.
-  const res = await createRequestFor(c.uid, { ...d, requestKey: `wp_${d.enquiry.id}`.slice(0, 64), source: 'wordpress' })
+  const fromMeta = enq.data.source === 'meta'
+  const res = await createRequestFor(c.uid, { ...d, requestKey: `${fromMeta ? 'meta' : 'wp'}_${d.enquiry.id}`.slice(0, 64), source: fromMeta ? 'meta' : 'wordpress' }, fromMeta ? (enq.data.attribution ?? null) : null)
   await enq.ref.update({ status: 'claimed', claimedBy: c.uid, jobId: res.jobId, claimedAt: FieldValue.serverTimestamp() })
+  if (fromMeta && enq.data.metaLeadId) await advanceLeadDoc(enq.data.metaLeadId, 'converted_to_job', 'job_created', { jobId: res.jobId, customerId: c.uid })   // lead -> customer -> job link
   return res
 })
 
@@ -105,8 +110,10 @@ export const submitQuote = callable(QuoteInput, async (req, d) => {
   const c = requireApprovedEngineer(req); requireVerified(c)
   const quoteId = `${d.jobId}_${c.uid}`                 // one live quote per engineer per job
   const jobRef = db.doc(`repairRequests/${d.jobId}`), quoteRef = db.doc(`repairQuotes/${quoteId}`)
+  const mp = await getMarketplaceSettings()
+  if (!mp.biddingEnabled) throw new HttpsError('failed-precondition', 'Quoting is paused for a short while. Please try again later.')
   const exp = new Date(d.expiresAt)
-  if (exp.getTime() < Date.now() + 3600_000 || exp.getTime() > Date.now() + 30 * 86400_000) throw new HttpsError('invalid-argument', 'Expiry must be between 1 hour and 30 days from now.')
+  if (exp.getTime() < Date.now() + 3600_000 || exp.getTime() > Date.now() + mp.maxQuoteValidityDays * 86400_000) throw new HttpsError('invalid-argument', `Expiry must be between 1 hour and ${mp.maxQuoteValidityDays} days from now.`)
   if (quoteTotalPence(d) <= 0) throw new HttpsError('invalid-argument', 'Quote total must be above £0.')
   const prof = (await db.doc(`engineerProfiles/${c.uid}`).get()).data()
   if (prof?.status !== 'approved') throw new HttpsError('permission-denied', 'Your engineer account is not approved.')
@@ -117,6 +124,7 @@ export const submitQuote = callable(QuoteInput, async (req, d) => {
     const j = job.data()!
     if (j.customerId === c.uid) throw new HttpsError('permission-denied', 'You cannot quote on your own job.')
     if (j.status !== 'open') throw new HttpsError('failed-precondition', 'This job is no longer open for quotes.')
+    if (!existing.exists && (j.quoteCount ?? 0) >= mp.maxQuotesPerJob) throw new HttpsError('failed-precondition', 'This job has received the maximum number of quotations.')
     if (!j.requiredSpecs.some((s: string) => (c.token.specs as string[]).includes(s))) throw new HttpsError('permission-denied', 'This job is outside your approved specialisations.')
     if (!j.serviceMethods.includes(d.serviceMethod)) throw new HttpsError('invalid-argument', 'The customer did not request that service method.')
     if (existing.exists && existing.data()!.status !== 'submitted' && existing.data()!.status !== 'withdrawn') throw new HttpsError('failed-precondition', 'This quote can no longer be changed.')
@@ -135,6 +143,7 @@ export const submitQuote = callable(QuoteInput, async (req, d) => {
   await notify({ userId: out.customerId, category: 'quotes', dedupeKey: `quote:${quoteId}:v${out.version}`,
     title: out.updated ? 'A quotation was updated' : 'New quotation received', body: `Open ${out.reference} to compare your quotes.`, link: `/customer/repairs/${d.jobId}`,
     email: { subject: out.updated ? 'A quotation was updated' : 'You have a new quotation', heading: out.updated ? 'Quotation updated' : 'New quotation', html: `<p>An engineer has ${out.updated ? 'updated their quote' : 'sent a quote'} for repair <b>${p(out.reference)}</b>. Compare prices, qualifications and reviews before you choose.</p>`, cta: 'Compare quotes' } })
+  await advanceLeadForJob(d.jobId, 'receiving_bids', 'first_bid')
   return { quoteId }
 })
 
@@ -154,6 +163,7 @@ export const withdrawQuote = callable(z.object({ quoteId: z.string() }), async (
 export const acceptQuote = callable(z.object({ quoteId: z.string() }), async (req, d) => {
   const c = requireRole(req, 'customer'); requireVerified(c)
   const qRef = db.doc(`repairQuotes/${d.quoteId}`)
+  const commissionBps = (await getFinanceSettings()).commissionBps   // frozen onto the job at acceptance: later rate changes never alter an accepted quotation
   const res = await db.runTransaction(async tx => {
     const q = await tx.get(qRef)
     if (!q.exists) throw new HttpsError('not-found', 'Quote not found.')
@@ -170,11 +180,12 @@ export const acceptQuote = callable(z.object({ quoteId: z.string() }), async (re
     const losers: string[] = []
     others.docs.forEach(o => { if (o.id !== d.quoteId) { tx.update(o.ref, { status: 'declined', updatedAt: FieldValue.serverTimestamp() }); losers.push(o.data().engineerId); tx.update(db.doc(`conversations/${o.id}`), { closed: true }) } })
     tx.update(qRef, { status: 'accepted', acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
-    tx.update(jRef, { status: 'engineer_selected', selectedEngineerId: quote.engineerId, acceptedQuoteId: d.quoteId, agreedTotalPence: quote.totalPence, agreedMethod: quote.serviceMethod, provider: quote.provider,
+    tx.update(jRef, { status: 'engineer_selected', selectedEngineerId: quote.engineerId, acceptedQuoteId: d.quoteId, agreedTotalPence: quote.totalPence, commissionBps, agreedMethod: quote.serviceMethod, provider: quote.provider,
       statusHistory: FieldValue.arrayUnion({ status: 'engineer_selected', at: Timestamp.now(), by: c.uid }), updatedAt: FieldValue.serverTimestamp() })
     return { replay: false, losers, engineerId: quote.engineerId as string, reference: job.reference as string, jobId: quote.jobId as string }
   })
   if (!res.replay) {
+    await advanceLeadForJob(res.jobId, 'engineer_selected', 'engineer_selected')
     await notify({ userId: res.engineerId, category: 'quotes', dedupeKey: `quote-accepted:${d.quoteId}`, title: 'Your quotation was accepted', body: 'Open the job to see next steps.', link: `/engineer/my-jobs/${res.jobId}`,
       email: { subject: 'Your quotation was accepted', heading: 'You got the job', html: `<p>The customer accepted your quote for <b>${p(res.reference)}</b>. They will now book an appointment.</p>`, cta: 'View job' } })
     await Promise.all(res.losers.map(uid => notify({ userId: uid, category: 'quotes', dedupeKey: `quote-declined:${res.jobId}:${uid}`, title: 'Quotation not selected', body: 'The customer chose another engineer for this job.', link: '/engineer/quotations' })))
@@ -204,6 +215,7 @@ export const changeJobStatus = callable(z.object({ jobId: z.string(), to: z.enum
     return { noop: false as const, j, actor, from }
   })
   if (out.noop) return { ok: true }
+  if (d.to === 'completed' || d.to === 'closed') await advanceLeadForJob(d.jobId, 'completed', 'completed')
   const { j, actor } = out
   const label: Record<string, string> = { cancelled: 'Repair cancelled', on_the_way: 'Your engineer is on the way', in_progress: 'Repair in progress', awaiting_parts: 'Awaiting parts', completed: 'Repair completed', closed: 'Repair closed', disputed: 'Repair disputed' }
   const other = actor === 'engineer' || actor === 'admin' ? j.customerId : j.selectedEngineerId

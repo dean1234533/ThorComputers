@@ -14,8 +14,10 @@ const CATS: [string, string][] = [['quotes', 'Quotations'], ['messages', 'Messag
 const Toggle = ({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) => (
   <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? 'bg-thor-blue' : 'bg-ink/20'}`}><span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} /></button>)
 
+import StripeConnectCard from '@/components/StripeConnectCard'
+
 export default function Settings() {
-  const { user, profile, signOut } = useAuth(); const toast = useToast(); const inst = useInstall()
+  const { user, profile, signOut, role } = useAuth(); const toast = useToast(); const inst = useInstall()
   const [support, setSupport] = useState<PushSupport>('unsupported'); const [perm, setPerm] = useState(permission()); const [del, setDel] = useState(false); const [confirmTxt, setConfirmTxt] = useState(''); const [steps, setSteps] = useState(false)
   useEffect(() => { pushSupport().then(setSupport) }, [])
   const prefs = profile?.notificationPrefs ?? { push: {}, email: {} }
@@ -29,6 +31,7 @@ export default function Settings() {
 
   return (
     <div className="max-w-2xl"><PageHeader title="Settings" />
+      {role === 'engineer' && <Section title="Payments"><StripeConnectCard /></Section>}
       <Section title="Notifications">
         <div className="mb-4 flex items-center gap-3 surface p-5"><Bell className="size-6 text-thor-blue" />
           <div className="flex-1"><p className="font-medium">Push notifications on this device</p><p className="text-sm text-thor-text">{support === 'ios-needs-install' ? 'On iPhone and iPad, install the app to your Home Screen first.' : support === 'unsupported' ? 'Not supported by this browser.' : perm === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings.' : perm === 'granted' ? 'On' : 'Off'}</p></div>

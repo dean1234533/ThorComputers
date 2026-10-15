@@ -1,0 +1,65 @@
+# Payments, Meta lead generation and the AI assistant
+
+Everything here is built and tested **locally against the Firebase emulators** (`npm run test:integrations`, 46 checks). Stripe, Meta and Gemini are mocked *inside the functions* when running locally; **nothing has been run against the real services yet**. This page lists exactly what you must configure to make each one real, in order.
+
+## Deploy order
+1. `firebase deploy --only firestore:rules,firestore:indexes` (new rules and 4 new composite indexes; indexes take a few minutes to build).
+2. Set the secrets (below). A function that declares a secret cannot deploy until that secret exists, so create **all** of them first. A placeholder such as `not-set-yet` is fine for features you are not enabling yet: the feature then fails safely.
+3. Create `functions/.env` with `META_APP_ID=<your Meta app id>` (public value, optional until Meta is live).
+4. `firebase deploy --only functions`, then the web app (Cloudflare picks it up from GitHub).
+5. Sign in as the Super Administrator **after** deploy so your token carries the new permissions (a super admin gets every permission automatically; ordinary admins need `Admin team` re-saved).
+
+| Secret | Used by | Where to get it |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | checkout, onboarding, refunds | Stripe → Developers → API keys (use the **restricted** or secret key; start with `sk_test_…`) |
+| `STRIPE_WEBHOOK_SECRET` | `stripeWebhook` | Stripe → Developers → Webhooks → your endpoint → Signing secret. **Two endpoints → join both secrets with a comma** |
+| `META_APP_SECRET` | OAuth, webhook signature, token encryption | developers.facebook.com → your app → Settings → Basic |
+| `META_VERIFY_TOKEN` | Meta webhook handshake | You choose any long random string; paste the same into Meta |
+| `GEMINI_API_KEY` | AI assistant | aistudio.google.com → API keys |
+| `WP_INTAKE_SECRET` | WordPress plugin | already set |
+
+Set each with `firebase functions:secrets:set NAME --account <you> --project thorcomputers-39d33`.
+
+## Stripe Connect (15% commission)
+**Model: destination charges.** The customer pays Thor Computer; Stripe keeps `application_fee_amount` (the commission) and transfers the rest to the engineer’s connected Express account. Consequences you should be aware of: Thor Computer is the **merchant of record**, handles refunds and chargebacks, and pays Stripe’s processing fee (so *net platform revenue = commission − commission refunded − Stripe fees*). Check this with your accountant and Stripe before launch: it affects VAT treatment, terms of service and who the customer’s contract is with.
+
+1. Stripe Dashboard → **Connect → Get started**; choose a **platform / marketplace**, **Express** accounts, United Kingdom. Complete the Connect platform profile.
+2. Webhooks → **Add endpoint** `https://europe-west2-thorcomputers-39d33.cloudfunctions.net/stripeWebhook`
+   * Endpoint 1 (*Your account*): `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `payment_intent.payment_failed`, `charge.succeeded`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`, `transfer.created`.
+   * Endpoint 2 (*Connected accounts*, same URL): `account.updated`.
+   * Put both signing secrets in `STRIPE_WEBHOOK_SECRET`, comma separated.
+3. Engineers: **Settings → Payments → Set up payments with Stripe** (hosted onboarding; Thor Computer stores only the account id and status).
+4. Customers: **Pay securely** on the repair page. **A payment counts only when Stripe’s signed webhook says so**; the success page is not proof.
+
+Rules implemented and tested: commission is calculated on the server in whole pence (rounded half up), from the accepted quotation, never from the browser; the rate in force when a quote is accepted is **frozen on the job**; only the Super Administrator can change the rate (0–30% hard cap) and every change is audited; replayed or duplicate events change nothing; an amount mismatch is flagged and never marked paid; refunds are admin-only, capped at the amount paid, and the record changes only when Stripe confirms; chargebacks are recorded with a resolution log; extra work needs the customer’s approval before it can be paid and uses the job’s frozen rate.
+
+Commission returned on a refund is derived from `charge.refunded` (proportional, matching Stripe’s `refund_application_fee`); the optional `application_fee.refunded` event, if you can subscribe to it, overrides with Stripe’s exact figure.
+
+**Not implemented (be aware):** deposit / pay-after-completion policies (only “pay in full”, optionally required before booking, is supported); SMS; payouts schedules beyond Stripe’s own; refunds initiated by customers (admin-initiated only).
+
+## Meta Lead Ads → repair jobs
+Flow: advert → Instant Form → signed `leadgen` webhook → lead fetched through the Graph API and saved in `metaLeads` (idempotent) → mapped and validated → **awaiting_confirmation** + a single-use confirmation link → the customer opens the link, signs in with that email → the normal request form is pre-filled → submitting **publishes the job and notifies matching engineers** → bids → selection → payment → commission. Campaign, ad set, ad and form ids are kept on the lead, job and transaction (attribution).
+
+**Why a customer confirmation step remains:** a repair job must belong to a customer account, and sharing someone’s details with engineers needs their confirmation. Complete leads therefore wait in *Awaiting confirmation* until the customer confirms; incomplete ones wait in *Awaiting information*. Nothing incomplete or unconfirmed is ever shown to engineers.
+
+**Email is off** (no Resend key), so the link is not emailed automatically. In **Admin → Incoming Leads → open a lead → Create confirmation link** you can copy it and send it by text or call, or press *Email it* once email is enabled.
+
+Meta setup:
+1. developers.facebook.com → **Create app** (type *Business*), add **Facebook Login for Business** (or Facebook Login) and **Webhooks**. Note the App ID (`META_APP_ID`) and App Secret (`META_APP_SECRET`).
+2. Facebook Login → Valid OAuth Redirect URIs: `https://europe-west2-thorcomputers-39d33.cloudfunctions.net/metaOAuthCallback`.
+3. Webhooks → **Page** object → Callback URL `https://europe-west2-thorcomputers-39d33.cloudfunctions.net/metaWebhook`, Verify token = your `META_VERIFY_TOKEN`, subscribe to field **leadgen**.
+4. Permissions requested: `ads_read, ads_management, leads_retrieval, pages_show_list, pages_read_engagement, pages_manage_metadata, pages_manage_ads, business_management`. Using them with people outside your own app’s roles needs **Meta App Review** and **business verification**. While the app is in Development mode it works for the app’s admins/developers/testers only.
+5. The Page that runs the ads must be one the connecting person administers, and (Business Settings → Integrations → Leads Access) the app must be allowed to retrieve leads (CRM access).
+6. In the app: **Admin → Marketing → Connect Meta account** (Super Administrator). You sign in on Meta’s own page; Thor Computer never sees a password. Tokens are stored AES-256-GCM encrypted in a collection no client can read.
+7. Add your Instant Form questions so the **postcode** and **problem** are captured, or map your own question names under *Lead forms & field mapping*. Lead forms need a privacy-policy link (Meta requires it); use `https://app.thorcomputer.com/privacy`.
+
+Safety: budget changes need an explicit confirmation, a configurable daily cap (default £50) and a per-change cap (default 50%); pause/resume needs confirmation; every change is audited. Missed webhooks are recovered hourly (and on demand) by reconciliation; unconverted leads lose their personal data after 90 days. The Graph API version defaults to `v23.0` (`META_GRAPH_VERSION` overrides it): check it is still current when you go live. Campaign figures from non-GBP ad accounts are excluded from GBP totals.
+
+## AI assistant
+Customer-only chat button. The Gemini key lives server-side. The model has **no tools**: it can chat and suggest a draft, and the draft only pre-fills the normal request form where the customer reviews and submits. It sees only the signed-in customer’s own job summaries. Conversations are **not stored** (only per-day message counts). Limits and the on/off switch are in **Admin → Platform Settings → AI assistant**. Model: `gemini-2.5-flash` by default (`GEMINI_MODEL` overrides).
+
+## Admin permissions added
+`marketing.manage` (leads, campaigns, ROI), `finance.view` (money), `payments.manage` (refunds, disputes), `integrations.manage` (connect Meta), `ai.manage`. **Super admin**: all. **Admin**: marketing + AI. **Support admin**: none of these, and cannot read lead PII or any financial data (enforced in rules and functions, tested).
+
+## What is NOT verified until you test with real accounts
+Real Stripe API behaviour (parameter names follow Stripe’s documented Connect destination-charge API but were not exercised against Stripe); real Meta Graph responses, permissions and App Review; real Gemini output quality; email delivery; push on devices; Firestore index builds; webhook delivery from Stripe/Meta to the deployed URLs. Use Stripe **test mode** and a Meta **test lead** (developers.facebook.com/tools/lead-ads-testing) first.

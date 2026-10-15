@@ -19,9 +19,10 @@ Everything here runs against the **Firebase emulators** and the fake project id 
 | `npm run seed` | (second terminal) Fictional users and data: `superadmin@`, `admin@`, `support@`, `customer@`, `engineer@` (approved), `pending-engineer@` `demo.test`, all with password `Passw0rd!demo`, plus one open job with a quote and a conversation |
 | `npm run dev` | Web app at http://127.0.0.1:5173 wired to the emulators (`web/.env.emulator`, `VITE_USE_EMULATORS=true`); the browser console prints `[firebase] using LOCAL EMULATORS` |
 | `npm run test:functions` | Unit tests: business rules, MFA gating, null handling |
-| `npm run test:rules` | 32 Firestore + Storage security-rules tests (unauthenticated, role boundaries, data protection, privilege escalation) |
+| `npm run test:rules` | 36 Firestore + Storage security-rules tests (unauthenticated, role boundaries, data protection, privilege escalation) |
 | `npm run test:smoke` | 51-step signed-in journey through the real client SDK: customer, engineers, admin, support, super admin (DEPLOYMENT §7) |
 | `npm run test:smoke:mfa` | Admin MFA server behaviour under `REQUIRE_ADMIN_MFA` = true, false, warn |
+| `npm run test:integrations` | 46 checks: signed Meta lead webhooks, lead→job attribution, signed Stripe webhooks, the 15% commission, refunds/disputes, role boundaries, campaign controls, ROI, marketplace switches and the AI assistant guardrails (Meta/Stripe/Gemini mocked inside the functions; webhooks are signed with fake local secrets and verified by the real handlers) |
 | `npm run test:wp` | Real plugin PHP + CF7 stubs posting signed requests to the real `wpIntake` function |
 | `npm run test:browser` | Headless Chrome signs in through the UI as 6 roles, visits every route, runs the request wizard, checks console errors and that nothing leaves localhost. Set `SHOT_DIR=/some/dir` for screenshots |
 | `npm run test:web` | Typecheck + production build |
@@ -31,6 +32,7 @@ Everything here runs against the **Firebase emulators** and the fake project id 
 Each `test:*` command starts and stops its own emulators, so they do not need `npm run emulators`, but they cannot run while it is running (ports clash).
 
 ## What the emulators cannot tell you
+* **Stripe, Meta and Gemini themselves**: locally they are replaced by fixtures inside the functions (`FUNCTIONS_EMULATOR`/`MOCK_EXTERNAL`). Request shapes follow the vendors’ documentation but have not been exercised against the real services. See `docs/INTEGRATIONS.md`.
 * **TOTP MFA**: the Auth emulator only implements phone MFA, so TOTP enrolment and sign-in are not exercisable locally.
 * **Composite indexes** are not enforced by the Firestore emulator. A query missing from `firestore.indexes.json` passes locally and fails in production until the index builds.
 * **Real FCM push, real email delivery, real Google sign-in, Identity Platform, token-revocation timing, App Check, quotas, cold starts, the Pub/Sub scheduler** (`sendAppointmentReminders` is registered but never fires locally).

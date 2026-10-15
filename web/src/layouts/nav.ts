@@ -1,7 +1,7 @@
-import { KeyRound, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, LucideIcon } from 'lucide-react'
+import { KeyRound, Home, Wrench, FileText, CalendarDays, MessageSquare, Bell, User, Settings, Briefcase, Search, Star, LayoutDashboard, Users, ShieldCheck, ClipboardList, Flag, SlidersHorizontal, HardHat, Megaphone, Inbox, Banknote, LucideIcon } from 'lucide-react'
 import type { Role } from '@/types/domain'
 
-export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications' }
+export interface NavItem { to: string; label: string; mobileLabel?: string; icon: LucideIcon; primary?: boolean; badge?: 'messages' | 'notifications'; perm?: string }
 
 export const NAV: Record<Role, NavItem[]> = {
   customer: [
@@ -31,6 +31,9 @@ export const NAV: Record<Role, NavItem[]> = {
     { to: '/admin/approvals', label: 'Approvals', icon: ShieldCheck, primary: true },
     { to: '/admin/jobs', label: 'Repair Requests', mobileLabel: 'Requests', icon: ClipboardList, primary: true },
     { to: '/admin/reports', label: 'Reports', icon: Flag, primary: true },
+    { to: '/admin/leads', label: 'Incoming Leads', mobileLabel: 'Leads', icon: Inbox, perm: 'marketing.manage' },
+    { to: '/admin/marketing', label: 'Marketing', icon: Megaphone, perm: 'marketing.manage' },
+    { to: '/admin/finance', label: 'Finance', icon: Banknote, perm: 'finance.view' },
     { to: '/admin/customers', label: 'Customers', icon: Users },
     { to: '/admin/engineers', label: 'Engineers', icon: HardHat },
     { to: '/admin/quotations', label: 'Quotations', icon: FileText },

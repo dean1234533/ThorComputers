@@ -1,3 +1,4 @@
+import ExtraWorkForm from '@/components/ExtraWorkForm'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { limit, orderBy, where } from 'firebase/firestore'
@@ -127,6 +128,7 @@ export function MyJobDetail() {
     <div className="max-w-2xl"><div className="mb-1 flex items-center gap-3"><p className="text-sm text-thor-text">{job.reference}</p><StatusPill status={job.status} /></div>
       <h1 className="font-display text-3xl">{job.device.manufacturer} {job.device.model}</h1>
       <Section title="Update progress">{next.length ? <div className="flex flex-wrap gap-2">{next.map(s => <Button key={s} variant={s === 'completed' ? 'cta' : 'primary'} loading={busy === s} onClick={() => go(s)}>{s === 'completed' ? 'Mark repair completed' : JOB_STATUS_LABEL[s]}</Button>)}</div> : <p className="text-sm text-thor-text">{job.status === 'engineer_selected' ? 'Waiting for the customer to book an appointment.' : 'No further updates available.'}</p>}</Section>
+      <Section title="Payment & extra work"><p className="mb-3 flex items-center gap-2 text-sm">Customer payment: {(job as { paymentStatus?: string }).paymentStatus === 'paid' ? <span className="rounded-full bg-ok/15 px-2.5 py-0.5 font-medium text-ok">Paid</span> : <span className="rounded-full bg-warn/15 px-2.5 py-0.5 font-medium text-warn">Not paid yet</span>}</p><ExtraWorkForm jobId={job.id} status={job.status} /></Section>
       <Section title="Job details"><p className="whitespace-pre-line">{job.description}</p>
         <dl className="mt-4 space-y-2 rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-ink/5"><div className="flex justify-between"><dt className="text-thor-text">Agreed price</dt><dd className="font-bold">{gbp(job.agreedTotalPence ?? 0)}</dd></div>
           {priv.data?.addressLine && <div className="flex justify-between gap-4"><dt className="text-thor-text">Address</dt><dd className="text-right">{priv.data.addressLine}, {priv.data.postcode}</dd></div>}

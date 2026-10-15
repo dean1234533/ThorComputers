@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { db, auth, callable, requireRole, requirePerm, audit, FieldValue, Timestamp, adminMfaMode } from './core'
 
 export const adminStats = callable(z.object({}), async (req) => {
-  requirePerm(req, 'reports.view')
+  const caller = requirePerm(req, 'reports.view')
+  const has = (perm: string) => caller.token.adminLevel === 'super_admin' || ((caller.token.perms as string[] | undefined) ?? []).includes(perm)
   const c = async (q: FirebaseFirestore.Query) => (await q.count().get()).data().count
   const since = Timestamp.fromMillis(Date.now() - 14 * 86400_000)
   const [customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports, recent, activity] = await Promise.all([
@@ -15,7 +16,23 @@ export const adminStats = callable(z.object({}), async (req) => {
   ])
   const perDay: Record<string, number> = {}
   recent.docs.forEach(d => { const k = d.data().createdAt.toDate().toISOString().slice(0, 10); perDay[k] = (perDay[k] ?? 0) + 1 })
-  return { totals: { customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports }, requestsPerDay: perDay,
+  // Marketing and finance figures are only returned to admins who hold those permissions (support admins never see money).
+  let marketing: Record<string, number> | null = null, finance: Record<string, number> | null = null
+  if (has('marketing.manage')) {
+    const [fb, ig, awaiting, adJobs, camps] = await Promise.all([c(db.collection('metaLeads').where('platform', '==', 'facebook')), c(db.collection('metaLeads').where('platform', '==', 'instagram')),
+      c(db.collection('metaLeads').where('status', 'in', ['awaiting_confirmation', 'awaiting_information'])), c(db.collection('repairRequests').where('attribution.source', '==', 'meta')), db.collection('metaCampaigns').get()])
+    const spend = camps.docs.reduce((a, x) => a + (x.data().nonGbp ? 0 : (x.data().insights?.spendPence ?? 0)), 0), leads = camps.docs.reduce((a, x) => a + (x.data().insights?.leads ?? 0), 0)
+    marketing = { facebookLeads: fb, instagramLeads: ig, leadsAwaitingVerification: awaiting, advertisingSpendPence: spend, costPerLeadPence: spend && leads ? Math.round(spend / leads) : 0, advertisingJobs: adJobs }
+  }
+  if (has('finance.view')) {
+    const [tx, outstanding, disputed] = await Promise.all([db.collection('transactions').where('status', 'in', ['paid', 'partially_refunded', 'refunded', 'disputed']).limit(2000).get(), c(db.collection('transactions').where('status', 'in', ['checkout_created', 'payment_failed'])), c(db.collection('transactions').where('status', '==', 'disputed'))])
+    const sum = (f: (t: any) => number) => tx.docs.reduce((a, x) => a + (f(x.data()) || 0), 0)
+    finance = { transactionValuePence: sum(t => t.totalPence), commissionPence: sum(t => t.commissionPence - (t.commissionRefundedPence ?? 0)), engineerPayoutPence: sum(t => t.payoutStatus === 'transferred' ? t.engineerSharePence : 0), outstandingPayments: outstanding, disputedTransactions: disputed,
+      advertisingRevenuePence: sum(t => t.attribution?.source === 'meta' ? t.totalPence : 0) }
+  }
+  const [cancelled] = await Promise.all([c(db.collection('repairRequests').where('status', '==', 'cancelled'))])
+  const [activeEngineers, scheduled, awaitingBids] = await Promise.all([c(db.collection('engineerProfiles').where('status', '==', 'approved')), c(db.collection('appointments').where('status', '==', 'confirmed')), c(db.collection('repairRequests').where('status', '==', 'open').where('quoteCount', '==', 0))])
+  return { totals: { customers, engineers, pendingApprovals, openJobs, activeQuotes, confirmed, completed, reports, cancelled, activeEngineers, scheduled, awaitingBids }, marketing, finance, requestsPerDay: perDay,
     recentActivity: activity.docs.map(a => ({ id: a.id, ...a.data(), createdAt: a.data().createdAt?.toMillis() ?? null })) }
 })
 
@@ -47,4 +64,11 @@ export const adminMfaStatus = callable(z.object({}), async (req) => {
     out.admins = await Promise.all(admins.docs.map(async a => ({ uid: a.id, email: String(a.data().email ?? ''), enrolledFactors: await factors(a.id) })))
   }
   return out
+})
+
+export const saveMarketplaceSettings = callable(z.object({ newRequestsEnabled: z.boolean(), biddingEnabled: z.boolean(), maxQuotesPerJob: z.number().int().min(1).max(50), maxQuoteValidityDays: z.number().int().min(1).max(90) }), async (req, d) => {
+  const c = requirePerm(req, 'settings.edit')
+  await db.doc('platformSettings/marketplace').set({ ...d, updatedAt: FieldValue.serverTimestamp(), updatedBy: c.uid }, { merge: true })
+  await audit(c.uid, 'marketplace.settings', 'platformSettings/marketplace', d)
+  return { ok: true }
 })

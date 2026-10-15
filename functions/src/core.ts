@@ -67,7 +67,15 @@ export function requireApprovedEngineer(req: CallableRequest): Caller {
 }
 export function requirePerm(req: CallableRequest, perm: string): Caller {
   const c = requireRole(req, 'admin')
-  if (!(c.token.perms as string[] | undefined)?.includes(perm)) throw new HttpsError('permission-denied', `Missing permission: ${perm}`)
+  // A super admin holds every permission, including ones added after their token was issued.
+  if (c.token.adminLevel !== 'super_admin' && !(c.token.perms as string[] | undefined)?.includes(perm)) throw new HttpsError('permission-denied', `Missing permission: ${perm}`)
+  return c
+}
+
+/** Strictly the Super Administrator (commission, payments, integrations). Not satisfiable by a custom permission list. */
+export function requireSuperAdmin(req: CallableRequest): Caller {
+  const c = requireRole(req, 'admin')
+  if (c.token.adminLevel !== 'super_admin') throw new HttpsError('permission-denied', 'Only a Super Administrator can do this.')
   return c
 }
 

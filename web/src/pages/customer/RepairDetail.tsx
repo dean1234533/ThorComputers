@@ -9,13 +9,14 @@ import { api, errMsg } from '@/lib/api'
 import QuoteCompare, { Quote, engName } from '@/components/QuoteCompare'
 import StatusTracker from '@/components/StatusTracker'
 import BookingPanel from '@/components/BookingPanel'
+import PaymentPanel from '@/components/PaymentPanel'
 import ReviewSheet from '@/components/ReviewSheet'
 import { ProviderTerms } from '@/components/ProviderNote'
 import { Avatar, Button, EmptyState, ListSkeleton, Section, Sheet, StatusPill, useToast } from '@/components/ui'
 import { DEVICE_TYPES, JobStatus, gbp, SERVICE_METHODS } from '@/types/domain'
 import { StorageImg } from '@/components/StorageImg'
 
-export interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; description: string; issues: string[]; urgency: string; location: { area: string }; selectedEngineerId: string | null; acceptedQuoteId: string | null; agreedTotalPence?: number; agreedMethod?: string; photoPaths: string[]; statusHistory?: { status: string; at: { toDate(): Date } }[]; quoteCount: number; provider?: 'independent' | 'thor'; customerId: string }
+export interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; description: string; issues: string[]; urgency: string; location: { area: string }; selectedEngineerId: string | null; acceptedQuoteId: string | null; agreedTotalPence?: number; agreedMethod?: string; paymentStatus?: string; photoPaths: string[]; statusHistory?: { status: string; at: { toDate(): Date } }[]; quoteCount: number; provider?: 'independent' | 'thor'; customerId: string }
 
 export default function RepairDetail() {
   const { id } = useParams(); const nav = useNavigate(); const { user } = useAuth(); const toast = useToast()
@@ -53,6 +54,8 @@ export default function RepairDetail() {
               <div className="text-right"><p className="font-display text-xl text-thor-blue">{gbp(job.agreedTotalPence ?? 0)}</p><p className="text-xs text-thor-text">{SERVICE_METHODS.find(m => m.id === job.agreedMethod)?.label}</p></div></div>
             {accepted && <div className="mt-3"><ProviderTerms provider={accepted.provider} /></div>}
             <Link to={`/messages/${job.acceptedQuoteId}`} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-thor-blue"><MessageSquare className="size-4" />Message your engineer</Link></Section>}
+
+          {job.acceptedQuoteId && !['cancelled'].includes(job.status) && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} /></Section>}
 
           {job.status === 'engineer_selected' && <Section title="Book your appointment"><BookingPanel jobId={job.id} needsAddress={needsAddress} onBooked={() => {}} /></Section>}
 

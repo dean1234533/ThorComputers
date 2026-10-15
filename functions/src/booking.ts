@@ -3,6 +3,7 @@ import { db, callable, requireAuth, requireRole, notify, FieldValue, Timestamp, 
 import { Availability, freeStarts, londonDate, slotKeysFor, SLOT_MINUTES } from './domain'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { REGION } from './core'
+import { getFinanceSettings } from './external'
 
 const DEFAULT_AVAIL: Availability = {
   slotMinutes: SLOT_MINUTES, unavailableDates: [],
@@ -48,6 +49,7 @@ export const bookAppointment = callable(z.object({ jobId: z.string(), startAt: z
   const c = requireRole(req, 'customer')
   const start = new Date(d.startAt)
   const aptId = `apt_${d.jobId}`
+  const mustPayFirst = (await getFinanceSettings()).requirePaymentBeforeBooking
   const out = await db.runTransaction(async tx => {
     const jRef = db.doc(`repairRequests/${d.jobId}`)
     const job = (await tx.get(jRef)).data()
@@ -58,6 +60,7 @@ export const bookAppointment = callable(z.object({ jobId: z.string(), startAt: z
       throw new HttpsError('failed-precondition', 'An appointment already exists. Use reschedule.')
     }
     if (job.status !== 'engineer_selected') throw new HttpsError('failed-precondition', 'Appointments can be booked after you select an engineer.')
+    if (mustPayFirst && job.paymentStatus !== 'paid') throw new HttpsError('failed-precondition', 'Please complete payment before booking your appointment.')
     const quote = (await tx.get(db.doc(`repairQuotes/${job.acceptedQuoteId}`))).data()!
     if (['home', 'office'].includes(job.agreedMethod)) {
       const priv = (await tx.get(db.doc(`repairRequests/${d.jobId}/private/details`))).data()

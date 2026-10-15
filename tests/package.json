@@ -8,7 +8,8 @@
     "test:smoke": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node smoke.mjs\"",
     "test:browser": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node browser.mjs\"",
     "test:smoke:mfa": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node smoke-mfa.mjs\"",
-    "test:wp": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node wp-plugin.mjs\""
+    "test:wp": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node wp-plugin.mjs\"",
+    "test:integrations": "firebase emulators:exec --only auth,functions,firestore,storage --project demo-thor \"node integrations.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^4.0.0",

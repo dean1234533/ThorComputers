@@ -18,7 +18,7 @@ initializeApp({ projectId: 'demo-thor' })
 const auth = getAuth(), db = getFirestore()
 
 export const PASSWORD = 'Passw0rd!demo'
-const ALL = ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view']
+const ALL = ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view', 'marketing.manage', 'finance.view', 'payments.manage', 'integrations.manage', 'ai.manage']
 const prefs = { push: { quotes: true, messages: true, bookings: true, status: true, reviews: true }, email: { quotes: true, messages: false, bookings: true, status: true, reviews: true } }
 
 async function user(email, fullName, claims, extra = {}) {
@@ -32,7 +32,7 @@ async function user(email, fullName, claims, extra = {}) {
 }
 
 const sa = await user('superadmin@demo.test', 'Demo Super Admin', { role: 'admin', adminLevel: 'super_admin', perms: ALL })
-await user('admin@demo.test', 'Demo Admin', { role: 'admin', adminLevel: 'admin', perms: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view'] })
+await user('admin@demo.test', 'Demo Admin', { role: 'admin', adminLevel: 'admin', perms: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view', 'marketing.manage', 'ai.manage'] })
 await user('support@demo.test', 'Demo Support', { role: 'admin', adminLevel: 'support', perms: ['customers.manage', 'reports.view'] })
 const cust = await user('customer@demo.test', 'Demo Customer', { role: 'customer' })
 const eng = await user('engineer@demo.test', 'Demo Engineer', { role: 'engineer', engineerApproved: true, specs: ['laptop', 'desktop', 'mac', 'software'] }, { engineerStatus: 'approved' })

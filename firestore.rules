@@ -8,7 +8,7 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function uid() { return request.auth.uid; }
     function isAdmin() { return signedIn() && request.auth.token.role == 'admin'; }
-    function can(p) { return isAdmin() && (p in request.auth.token.perms); }
+    function can(p) { return isAdmin() && (request.auth.token.adminLevel == 'super_admin' || p in request.auth.token.perms); }
     function isEngineer() { return signedIn() && request.auth.token.role == 'engineer'; }
     function approvedEngineer() { return isEngineer() && request.auth.token.engineerApproved == true; }
     function notSuspended() { return request.auth.token.suspended != true; }
@@ -151,9 +151,33 @@ service cloud.firestore {
     }
     match /auditLogs/{id} { allow read: if can('messages.audit') || can('admins.manage'); allow write: if false; }
     match /platformSettings/{doc} {
-      allow read: if doc == 'public' || can('settings.edit');   // 'public' = categories, support info, booking rules
+      // 'public' = categories, support info, booking rules. finance/marketing/ai hold commission, budgets and AI config: only the matching admin permission reads them.
+      allow read: if doc == 'public' || can('settings.edit') || (doc == 'finance' && can('finance.view')) || (doc == 'marketing' && can('marketing.manage')) || (doc == 'marketplace' && can('settings.edit')) || (doc == 'ai' && can('ai.manage'));
       allow write: if false;
     }
+
+    // ---------- payments (all written by Cloud Functions from verified Stripe events) ----------
+    match /transactions/{id} { allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('finance.view') || can('jobs.manage')); allow write: if false; }
+    match /additionalCharges/{id} { allow read: if signedIn() && (resource.data.customerId == uid() || resource.data.engineerId == uid() || can('jobs.manage')); allow write: if false; }
+    match /stripeAccounts/{id} { allow read: if signedIn() && (resource.data.engineerId == uid() || can('finance.view') || can('engineers.review')); allow write: if false; }
+    match /commissionRecords/{id} { allow read: if can('finance.view'); allow write: if false; }
+    match /refunds/{id} { allow read: if can('finance.view'); allow write: if false; }
+    match /paymentDisputes/{id} { allow read: if can('finance.view'); allow write: if false; }
+    match /stripeEvents/{id} { allow read, write: if false; }
+
+    // ---------- marketing & lead generation (contains lead PII: marketing.manage only; support admins cannot read it) ----------
+    match /metaLeads/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /metaCampaigns/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /metaLeadForms/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /metaAssets/{id} { allow read: if can('marketing.manage') || can('integrations.manage'); allow write: if false; }
+    match /metaWebhookEvents/{id} { allow read: if can('marketing.manage') || can('integrations.manage'); allow write: if false; }
+    match /leadMappings/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /campaignRouting/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /leadConversionEvents/{id} { allow read: if can('marketing.manage'); allow write: if false; }
+    match /integrationHealth/{id} { allow read: if can('integrations.manage') || can('marketing.manage') || can('finance.view'); allow write: if false; }
+    match /metaConnections/{id} { allow read, write: if false; }   // encrypted access tokens: server only, never readable by any client
+    match /chatUsage/{id} { allow read, write: if false; }
+    match /devMetaLeads/{id} { allow read, write: if false; }
     match /integrationEvents/{id} { allow read: if can('settings.edit'); allow write: if false; }
     match /enquiries/{id} { allow read, write: if false; }   // WordPress intake, claimed via callable
 

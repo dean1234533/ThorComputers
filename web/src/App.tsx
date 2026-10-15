@@ -29,6 +29,7 @@ const Appointments = L(() => import('@/pages/shared/Appointments')), Messages = 
 
 const A = (k: string) => named(() => import('@/pages/admin/AdminPages'), k)
 const AdminOverview = A('AdminOverview'), Approvals = A('Approvals'), AdminCustomers = A('AdminCustomers'), AdminEngineers = A('AdminEngineers'), AdminJobs = A('AdminJobs'), AdminQuotations = A('AdminQuotations'), AdminAppointments = A('AdminAppointments'), AdminReviews = A('AdminReviews'), AdminReports = A('AdminReports')
+const AdminLeads = L(() => import('@/pages/admin/AdminLeads')), AdminMarketing = L(() => import('@/pages/admin/AdminMarketing')), AdminFinance = L(() => import('@/pages/admin/AdminFinance'))
 const AdminSettings = L(() => import('@/pages/admin/AdminSettings')), AdminSecurity = L(() => import('@/pages/admin/AdminSecurity'))
 
 export default function App() {
@@ -55,7 +56,7 @@ export default function App() {
         </Route></Route>
 
         <Route element={<RequireAuth role="admin" />}><Route element={<AdminMfaGuard />}><Route element={<AppShell />}>
-          <Route path="/admin" element={<AdminOverview />} /><Route path="/admin/approvals" element={<Approvals />} /><Route path="/admin/customers" element={<AdminCustomers />} /><Route path="/admin/engineers" element={<AdminEngineers />} />
+          <Route path="/admin" element={<AdminOverview />} /><Route path="/admin/leads" element={<AdminLeads />} /><Route path="/admin/marketing" element={<AdminMarketing />} /><Route path="/admin/finance" element={<AdminFinance />} /><Route path="/admin/approvals" element={<Approvals />} /><Route path="/admin/customers" element={<AdminCustomers />} /><Route path="/admin/engineers" element={<AdminEngineers />} />
           <Route path="/admin/jobs" element={<AdminJobs />} /><Route path="/admin/quotations" element={<AdminQuotations />} /><Route path="/admin/appointments" element={<AdminAppointments />} /><Route path="/admin/reviews" element={<AdminReviews />} /><Route path="/admin/reports" element={<AdminReports />} /><Route path="/admin/settings" element={<AdminSettings />} /><Route path="/admin/security" element={<AdminSecurity />} />
         </Route></Route></Route>
         <Route path="*" element={<Navigate to="/" replace />} />

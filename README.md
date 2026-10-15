@@ -28,4 +28,5 @@ npm run emulators                # terminal 1  (Auth, Firestore, Storage, Functi
 npm run seed && npm run dev      # terminal 2  -> http://127.0.0.1:5173, sign in as customer@demo.test / Passw0rd!demo
 npm test                         # everything: unit, rules, smoke, MFA, WordPress plugin, browser, build, PHP lint
 ```
+Payments (Stripe Connect, 15% commission), Meta Lead Ads, campaign/ROI dashboards and the AI assistant are described in `docs/INTEGRATIONS.md`.
 See `docs/LOCAL_DEVELOPMENT.md` (commands, prerequisites, limits of the emulators), `docs/DEPLOYMENT.md` to deploy and `docs/TESTING.md` for what has and hasn't been verified.

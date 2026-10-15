@@ -46,7 +46,36 @@ export const api = {
   adminStats: fn<object, any>('adminStats'),
   adminMfaStatus: fn<object, AdminMfaStatus>('adminMfaStatus'),
   savePlatformSettings: fn<Record<string, unknown>>('savePlatformSettings'),
-  getEnquiry: fn<{ id: string; token: string }, { fields: Record<string, string> }>('getEnquiry'),
+  saveMarketplaceSettings: fn<{ newRequestsEnabled: boolean; biddingEnabled: boolean; maxQuotesPerJob: number; maxQuoteValidityDays: number }>('saveMarketplaceSettings'),
+  getEnquiry: fn<{ id: string; token: string }, { fields: Record<string, string>; source?: string }>('getEnquiry'),
+  // payments (Stripe Connect)
+  stripeConnectOnboard: fn<object, { url: string }>('stripeConnectOnboard'),
+  stripeConnectRefresh: fn<object, { connected: boolean; chargesEnabled: boolean; payoutsEnabled: boolean }>('stripeConnectRefresh'),
+  createCheckout: fn<{ jobId: string; additionalChargeId?: string }, { alreadyPaid: boolean; url: string | null }>('createCheckout'),
+  proposeAdditionalCharge: fn<{ jobId: string; amountPence: number; description: string }, { id: string }>('proposeAdditionalCharge'),
+  respondAdditionalCharge: fn<{ id: string; accept: boolean }>('respondAdditionalCharge'),
+  refundTransaction: fn<{ transactionId: string; amountPence: number; reason: string }, { refundId: string }>('refundTransaction'),
+  resolvePaymentDispute: fn<{ disputeId: string; resolution: 'won' | 'lost' | 'refunded' | 'withdrawn'; note: string; customerComplaint?: string; engineerResponse?: string }>('resolvePaymentDispute'),
+  saveFinanceSettings: fn<{ commissionBps: number; requirePaymentBeforeBooking: boolean; refundPolicy?: string; cancellationPolicy?: string }>('saveFinanceSettings'),
+  adminFinanceStats: fn<{ from?: string; to?: string }, any>('adminFinanceStats'),
+  // marketing & lead generation (Meta)
+  metaConnectUrl: fn<object, { url: string }>('metaConnectUrl'),
+  metaDisconnect: fn<object>('metaDisconnect'),
+  syncMetaCampaigns: fn<object, { campaigns: number }>('syncMetaCampaigns'),
+  reconcileMetaLeads: fn<object, { checked: number; imported: number }>('reconcileMetaLeads'),
+  setMetaCampaignStatus: fn<{ campaignId: string; status: 'ACTIVE' | 'PAUSED'; confirm: true }>('setMetaCampaignStatus'),
+  setMetaCampaignBudget: fn<{ campaignId: string; dailyBudgetPence: number; confirm: true }>('setMetaCampaignBudget'),
+  rejectMetaLead: fn<{ leadId: string; reason: string }>('rejectMetaLead'),
+  updateMetaLead: fn<{ leadId: string; fields: Record<string, string> }, { status: string }>('updateMetaLead'),
+  issueLeadConfirmationLink: fn<{ leadId: string; sendEmail?: boolean }, { url: string }>('issueLeadConfirmationLink'),
+  saveLeadMapping: fn<{ formId: string; fields: Record<string, string[]>; required: string[] }>('saveLeadMapping'),
+  saveCampaignRouting: fn<{ campaignId: string; enabled: boolean; deviceType?: string; serviceMethod?: string }>('saveCampaignRouting'),
+  saveMarketingSettings: fn<{ requiredFields: string[]; defaultFeedsMarketplace: boolean; attributionWindowDays: number; maxDailyBudgetPence: number; maxBudgetChangePct: number; autoImport: boolean }>('saveMarketingSettings'),
+  adminMarketingStats: fn<{ from?: string; to?: string }, any>('adminMarketingStats'),
+  // AI assistant
+  chatbotMessage: fn<{ messages: { role: 'user' | 'assistant'; text: string }[] }, { reply: string; draft: Record<string, any> | null; ready: boolean; escalate: boolean; remainingToday: number }>('chatbotMessage'),
+  saveAiSettings: fn<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string }>('saveAiSettings'),
+  aiUsage: fn<object, { perDay: Record<string, { messages: number; users: number }> }>('aiUsage'),
 }
 
 export { userMessage as errMsg } from './errors'

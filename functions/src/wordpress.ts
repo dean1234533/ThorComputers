@@ -3,6 +3,7 @@ import { createHmac, createHash, randomBytes, timingSafeEqual } from 'node:crypt
 import { z } from 'zod'
 import { db, FieldValue, Timestamp, HttpsError, callable, requireRole, APP_URL, REGION } from './core'
 import { sendEmail, p } from './email'
+import { advanceLeadDoc } from './leads'
 
 const sha = (s: string) => createHash('sha256').update(s).digest('hex')
 const Body = z.object({
@@ -65,5 +66,6 @@ export async function verifyEnquiry(id: string, token: string, email: string) {
 export const getEnquiry = callable(z.object({ id: z.string().max(80), token: z.string().max(80) }), async (req, d) => {
   const c = requireRole(req, 'customer')
   const { data } = await verifyEnquiry(d.id, d.token, String(c.token.email).toLowerCase())
-  return { fields: data.fields }
+  if (data.source === 'meta' && data.metaLeadId) await advanceLeadDoc(data.metaLeadId, 'verified', 'verified')   // the customer proved they own the email address
+  return { fields: data.fields, source: data.source ?? 'wordpress' }
 })

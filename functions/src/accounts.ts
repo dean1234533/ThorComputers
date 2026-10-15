@@ -87,11 +87,11 @@ export const setAccountSuspended = callable(z.object({ userId: z.string(), suspe
 
 export const setAdminRole = callable(z.object({
   userId: z.string(), level: z.enum(['super_admin', 'admin', 'support', 'none']),
-  perms: z.array(z.enum(['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'])).optional(),
+  perms: z.array(z.enum(['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view', 'marketing.manage', 'finance.view', 'payments.manage', 'integrations.manage', 'ai.manage'])).optional(),
 }), async (req, d) => {
   const c = requirePerm(req, 'admins.manage')
   if (d.userId === c.uid) throw new HttpsError('failed-precondition', 'You cannot change your own admin level.')
-  const DEF = { super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'], admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view'], support: ['customers.manage', 'reports.view'] } as const
+  const DEF = { super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view', 'marketing.manage', 'finance.view', 'payments.manage', 'integrations.manage', 'ai.manage'], admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view', 'marketing.manage', 'ai.manage'], support: ['customers.manage', 'reports.view'] } as const
   if (d.level === 'none') {
     await setClaims(d.userId, { role: 'customer', adminLevel: null, perms: [] }); await db.doc(`users/${d.userId}`).update({ role: 'customer', adminLevel: null, perms: [] })
   } else {

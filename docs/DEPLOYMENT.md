@@ -64,6 +64,9 @@ Custom domain **(needs approval)**: the project's Settings → Domains & Routes 
 4. Settings → Thor Computer App: set the URL, tick *Forward Contact Form 7 quote submissions*, enable button/banner as wanted, then submit a test enquiry and check **Integration status**.
 5. Add the button anywhere with `[thor_app_download]`, the promo section with `[thor_app_banner]`.
 
+## 6b. Payments, Meta lead generation, AI assistant
+See **`docs/INTEGRATIONS.md`**: new secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `META_APP_SECRET`, `META_VERIFY_TOKEN`, `GEMINI_API_KEY`) must exist before `firebase deploy --only functions`, plus webhook URLs and the Stripe/Meta account setup.
+
 ## 6a. Before you deploy: run the local suite
 `npm test` (see `docs/LOCAL_DEVELOPMENT.md`). It does **not** replace the staging smoke test below: composite indexes, TOTP, real email/push and real devices are only testable against a real project.
 

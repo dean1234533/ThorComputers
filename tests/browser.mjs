@@ -145,7 +145,7 @@ await step('unapproved engineer can reach onboarding but sees no available jobs'
 console.log('\nAdmin (super admin) and support admin')
 const adm = await newSession('superadmin', false)
 await step('super admin signs in and lands on /admin', async () => { await login(adm, 'superadmin@demo.test'); ok(new URL(adm.page.url()).pathname === '/admin', adm.page.url()) })
-for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/settings', '/notifications', '/settings'])
+for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/leads', '/admin/marketing', '/admin/finance', '/admin/settings', '/notifications', '/settings'])
   await step(`super admin ${p}`, () => visit(adm, p))
 await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
   await visit(adm, '/admin')
@@ -167,6 +167,10 @@ await step('mobile admin navigation stays aligned at 320px and 390px', async () 
 await step('admin is bounced from customer/engineer areas', async () => { await visit(adm, '/customer', { expectPath: '/admin' }) })
 const sup = await newSession('support', false)
 await step('support admin signs in; settings page does not crash', async () => { await login(sup, 'support@demo.test'); await visit(sup, '/admin'); await visit(sup, '/admin/customers'); await visit(sup, '/admin/settings') })
+await step('support admin sees no Finance, Marketing or Leads (menu hidden and pages refuse)', async () => {
+  const t = await bodyText(sup.page); ok(!/Finance|Incoming Leads|Marketing/.test(t), 'support admin can see money/marketing menu items')
+  await visit(sup, '/admin/finance', { mustContain: 'No access' }); await visit(sup, '/admin/marketing', { mustContain: 'No access' }); await visit(sup, '/admin/leads', { mustContain: 'No access' })
+})
 
 console.log('\nAdmin MFA guard (status response simulated; the emulator cannot do TOTP)')
 async function mfaSession(label, mode, sessionHasSecondFactor = false) {

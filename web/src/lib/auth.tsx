@@ -7,11 +7,13 @@ import type { AdminPermission, Role } from '@/types/domain'
 
 export interface Profile {
   role: Role; email: string; fullName: string; phone: string; postcode: string; photoURL: string | null; status: string
-  notificationPrefs?: { push: Record<string, boolean>; email: Record<string, boolean> }; engineerStatus?: string; createdAt?: { toDate(): Date }
+  notificationPrefs?: { push: Record<string, boolean>; email: Record<string, boolean> }; engineerStatus?: string; adminLevel?: string; createdAt?: { toDate(): Date }
 }
 interface Ctx {
   user: User | null; profile: Profile | null; role: Role | null; perms: AdminPermission[]; approved: boolean; specs: string[]
   loading: boolean; needsSetup: boolean; refreshClaims: () => Promise<void>; signOut: () => Promise<void>
+  /** UI hint only (the server decides). A super admin holds every permission. */
+  can: (perm: string) => boolean; isSuperAdmin: boolean
 }
 const AuthCtx = createContext<Ctx>(null!)
 export const useAuth = () => useContext(AuthCtx)
@@ -52,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Ctx>(() => ({
     user, profile, role: (claims.role as Role) ?? profile?.role ?? null, perms: (claims.perms as AdminPermission[]) ?? [], approved: claims.engineerApproved === true, specs: (claims.specs as string[]) ?? [],
+    can: (perm: string) => claims.adminLevel === 'super_admin' || ((claims.perms as string[]) ?? []).includes(perm), isSuperAdmin: claims.adminLevel === 'super_admin',
     loading: !authReady || !profileReady, needsSetup: !!user && authReady && profileReady && !profile && !profileError, refreshClaims, signOut,
   }), [user, profile, claims, authReady, profileReady, profileError, refreshClaims, signOut])
   return <AuthCtx.Provider value={value}>{signingOut ? <div role="status" className="grid min-h-dvh place-items-center text-thor-blue">Signing out…</div> : children}</AuthCtx.Provider>

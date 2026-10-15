@@ -3,10 +3,11 @@ export type AdminLevel = 'super_admin' | 'admin' | 'support'
 export type AdminPermission =
   | 'engineers.review' | 'customers.manage' | 'jobs.manage' | 'reviews.moderate'
   | 'messages.audit' | 'settings.edit' | 'admins.manage' | 'reports.view'
+  | 'marketing.manage' | 'finance.view' | 'payments.manage' | 'integrations.manage' | 'ai.manage'
 
 export const ADMIN_DEFAULT_PERMISSIONS: Record<AdminLevel, AdminPermission[]> = {
-  super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view'],
-  admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view'],
+  super_admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'messages.audit', 'settings.edit', 'admins.manage', 'reports.view', 'marketing.manage', 'finance.view', 'payments.manage', 'integrations.manage', 'ai.manage'],
+  admin: ['engineers.review', 'customers.manage', 'jobs.manage', 'reviews.moderate', 'reports.view', 'marketing.manage', 'ai.manage'],
   support: ['customers.manage', 'reports.view'],
 }
 

@@ -21,12 +21,14 @@ const Badge = ({ n }: { n: number }) => n > 0 ? (
   <motion.span key={n} initial={{ scale: .4 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 500, damping: 18 }}
     className="absolute -right-2 -top-1.5 grid min-w-5 place-items-center rounded-full bg-thor-orange px-1 text-[11px] font-bold leading-5 text-ink" aria-label={`${n} unread`}>{n > 99 ? '99+' : n}</motion.span>) : null
 
+import ChatWidget from '@/components/ChatWidget'
+
 export default function AppShell() {
-  const { role, profile, signOut } = useAuth()
+  const { role, profile, signOut, can } = useAuth()
   const badges = useBadges()
   const loc = useLocation()
   const [more, setMore] = useState(false)
-  const items = NAV[role ?? 'customer']
+  const items = NAV[role ?? 'customer'].filter(i => !i.perm || can(i.perm))
   const primary = items.filter(i => i.primary), secondary = items.filter(i => !i.primary)
   const count = (i: NavItem) => (i.badge ? badges[i.badge] : 0)
   const current = items.find(i => i.to === loc.pathname) ?? items.find(i => loc.pathname.startsWith(i.to + '/'))
@@ -67,6 +69,7 @@ export default function AppShell() {
       </header>
       <main id="main-content" className="mx-auto max-w-[1240px] px-5 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-7 md:px-8 md:pb-16 md:pt-9 xl:px-12">
         <Suspense fallback={<div className="surface p-6" role="status"><div className="flex items-center gap-3 text-sm text-thor-slate"><Spinner />Loading page…</div></div>}><Outlet /></Suspense>
+        {role === 'customer' && <ChatWidget />}
       </main>
 
       {/* Mobile bottom navigation: four primary destinations + More */}

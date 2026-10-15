@@ -217,3 +217,47 @@ test('reports: reporter can create and read own; others cannot read; nobody upda
   await assertFails(getDoc(doc(customerB(), 'reports/r1')))
   await assertFails(updateDoc(doc(customerA(), 'reports/r1'), { status: 'dismissed' }))
 })
+
+// ---------- payments & marketing collections ----------
+const support = () => as('sup1', { role: 'admin', adminLevel: 'support', perms: ['customers.manage', 'reports.view'] })
+const superAdmin = () => as('sa1', { role: 'admin', adminLevel: 'super_admin', perms: [] })     // empty on purpose: super admin holds every permission
+const marketer = () => as('mk1', { role: 'admin', adminLevel: 'admin', perms: ['marketing.manage'] })
+const seedMoney = () => env.withSecurityRulesDisabled(async ctx => {
+  const db = ctx.firestore()
+  await setDoc(doc(db, 'transactions/job2'), { customerId: 'custA', engineerId: 'eng1', totalPence: 10000, commissionPence: 1500, status: 'paid' })
+  await setDoc(doc(db, 'commissionRecords/job2'), { commissionPence: 1500 }); await setDoc(doc(db, 'refunds/re1'), { amountPence: 1 }); await setDoc(doc(db, 'paymentDisputes/dp1'), { amountPence: 1 })
+  await setDoc(doc(db, 'stripeAccounts/eng1'), { engineerId: 'eng1', accountId: 'acct_1' }); await setDoc(doc(db, 'stripeEvents/evt1'), { type: 'x' }); await setDoc(doc(db, 'additionalCharges/ac1'), { customerId: 'custA', engineerId: 'eng1', jobId: 'job2' })
+  await setDoc(doc(db, 'metaLeads/L1'), { mapped: { email: 'x@y.z' }, status: 'imported' }); await setDoc(doc(db, 'metaConnections/main'), { tokenEnc: 'secret' }); await setDoc(doc(db, 'metaCampaigns/c1'), { name: 'c' })
+  await setDoc(doc(db, 'leadMappings/default'), { required: [] }); await setDoc(doc(db, 'chatUsage/u_1'), { count: 1 }); await setDoc(doc(db, 'devMetaLeads/L1'), {})
+  await setDoc(doc(db, 'platformSettings/finance'), { commissionBps: 1500 }); await setDoc(doc(db, 'platformSettings/marketing'), {}); await setDoc(doc(db, 'platformSettings/ai'), {})
+})
+test('payments: participants read only their own transaction; strangers, support and plain admins without finance cannot; nobody can write', async () => {
+  await seedMoney()
+  await assertSucceeds(getDoc(doc(customerA(), 'transactions/job2'))); await assertSucceeds(getDoc(doc(eng(), 'transactions/job2')))
+  await assertFails(getDoc(doc(customerB(), 'transactions/job2'))); await assertFails(getDoc(doc(support(), 'transactions/job2'))); await assertFails(getDoc(doc(pendingEng(), 'transactions/job2')))
+  await assertSucceeds(getDoc(doc(superAdmin(), 'transactions/job2')))
+  for (const who of [customerA, eng, superAdmin]) { await assertFails(setDoc(doc(who(), 'transactions/job2'), { status: 'paid', totalPence: 1 })); await assertFails(updateDoc(doc(who(), 'transactions/job2'), { commissionPence: 0 })) }
+  await assertFails(setDoc(doc(customerA(), 'transactions/new'), { customerId: 'custA', status: 'paid' }))
+})
+test('commission records, refunds, disputes, Stripe events and tokens are unreadable to customers and engineers; finance data needs finance.view', async () => {
+  await seedMoney()
+  for (const p of ['commissionRecords/job2', 'refunds/re1', 'paymentDisputes/dp1']) { await assertFails(getDoc(doc(customerA(), p))); await assertFails(getDoc(doc(eng(), p))); await assertFails(getDoc(doc(support(), p))); await assertSucceeds(getDoc(doc(superAdmin(), p))) }
+  for (const p of ['stripeEvents/evt1', 'metaConnections/main', 'chatUsage/u_1', 'devMetaLeads/L1']) for (const who of [customerA, eng, support, marketer, superAdmin]) await assertFails(getDoc(doc(who(), p)))
+  await assertSucceeds(getDoc(doc(eng(), 'stripeAccounts/eng1'))); await assertFails(getDoc(doc(customerA(), 'stripeAccounts/eng1')))
+  await assertSucceeds(getDoc(doc(customerA(), 'additionalCharges/ac1'))); await assertFails(getDoc(doc(customerB(), 'additionalCharges/ac1')))
+})
+test('marketing data (lead PII, campaigns, mappings) is readable only with marketing.manage; support admins and users cannot; no client writes', async () => {
+  await seedMoney()
+  for (const p of ['metaLeads/L1', 'metaCampaigns/c1', 'leadMappings/default']) {
+    await assertSucceeds(getDoc(doc(marketer(), p))); await assertSucceeds(getDoc(doc(superAdmin(), p)))
+    for (const who of [customerA, eng, support, () => admin(['engineers.review', 'jobs.manage'])]) await assertFails(getDoc(doc(who(), p)))
+    await assertFails(setDoc(doc(marketer(), p), { x: 1 })); await assertFails(setDoc(doc(superAdmin(), p), { x: 1 }))
+  }
+  await assertFails(getDocs(collection(support(), 'metaLeads')))
+})
+test('finance, marketing and AI settings documents are admin-permission gated; only "public" is world-readable', async () => {
+  await seedMoney()
+  await assertFails(getDoc(doc(customerA(), 'platformSettings/finance'))); await assertFails(getDoc(doc(marketer(), 'platformSettings/finance'))); await assertSucceeds(getDoc(doc(superAdmin(), 'platformSettings/finance')))
+  await assertSucceeds(getDoc(doc(marketer(), 'platformSettings/marketing'))); await assertFails(getDoc(doc(customerA(), 'platformSettings/marketing'))); await assertFails(getDoc(doc(customerA(), 'platformSettings/ai')))
+  await assertFails(setDoc(doc(superAdmin(), 'platformSettings/finance'), { commissionBps: 0 }))
+})

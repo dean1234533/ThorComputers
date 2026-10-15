@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams, Link } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'motion/react'
 import { ArrowLeft, Camera, Check, CheckCircle2, Laptop, Monitor, Gamepad2, Apple, Smartphone, Tablet, Printer, Cpu, X, LucideIcon } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -34,8 +34,17 @@ export default function NewRequest() {
   useEffect(() => { if (!d.postcode && profile?.postcode) setD(s => ({ ...s, postcode: profile.postcode })) }, [profile, d.postcode])
   useEffect(() => {          // prefill from a WordPress enquiry (the server validates the signed link + email match)
     if (!enquiry) return
-    api.getEnquiry(enquiry).then(({ fields: f }) => setD(s => ({ ...s, manufacturer: s.manufacturer || f.brand || '', model: s.model || f.model || '', serial: s.serial || f.serial_n || '', description: s.description || f.problem || '', postcode: f.postal_code || s.postcode })))
+    api.getEnquiry(enquiry).then(({ fields: f }) => setD(s => ({ ...s, device: s.device || (DEVICE_TYPES.some(x => x.id === f.device) ? (f.device as DeviceType) : ''), methods: s.methods.length ? s.methods : (SERVICE_METHODS.some(x => x.id === f.method) ? [f.method as ServiceMethod] : []), urgency: ['flexible', 'soon', 'urgent'].includes(f.urgency) ? (f.urgency as Draft['urgency']) : s.urgency, manufacturer: s.manufacturer || f.brand || '', model: s.model || f.model || '', serial: s.serial || f.serial_n || '', description: s.description || f.problem || '', postcode: f.postal_code || s.postcode })))
       .catch(e => toast('bad', errMsg(e)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const loc = useLocation()
+  useEffect(() => {          // prefill from the AI assistant's draft; the customer still reviews every step and submits themselves
+    const p = (loc.state as { prefill?: Record<string, any> } | null)?.prefill; if (!p) return
+    setD(s => ({ ...s, device: DEVICE_TYPES.some(x => x.id === p.device) ? p.device : s.device, manufacturer: p.manufacturer || s.manufacturer, model: p.model || s.model, description: p.problem || s.description, postcode: p.postcode || s.postcode,
+      urgency: ['flexible', 'soon', 'urgent'].includes(p.urgency) ? p.urgency : s.urgency, methods: Array.isArray(p.serviceMethods) && p.serviceMethods.length ? p.serviceMethods.filter((m: string) => SERVICE_METHODS.some(x => x.id === m)) : s.methods }))
+    nav('.', { replace: true, state: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
