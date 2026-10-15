@@ -176,6 +176,7 @@ await step('super admin verifies the credential and approves both engineers; rej
   await denied(superAdmin.call('reviewEngineerApplication', { engineerId: engineer2.uid, decision: 'reject' }), 'invalid-argument', 'note')
   await superAdmin.call('verifyQualification', { qualificationId: qual.qualId, decision: 'verified' })
   eq((await superAdmin.call('reviewEngineerApplication', { engineerId: engineer.uid, decision: 'approve', provider: 'independent' })).status, 'approved')
+  const note = (await A.db.collection('notifications').where('userId', '==', engineer.uid).get()).docs.map(d => d.data()).find(n => n.title === 'Application approved'); ok(note, 'the engineer got no notification when approved'); eq(note.link, '/engineer/jobs')
   await superAdmin.call('reviewEngineerApplication', { engineerId: engineer2.uid, decision: 'approve' })
   await denied(superAdmin.call('reviewEngineerApplication', { engineerId: engineer.uid, decision: 'approve' }), 'failed-precondition')   // not double-approvable
 })

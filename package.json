@@ -12,10 +12,12 @@
     "test:smoke": "bash scripts/prepare-local.sh && bash scripts/local-env.sh npm --prefix tests run test:smoke",
     "test:web": "npm --prefix web run typecheck && npm --prefix web run build",
     "lint:php": "bash scripts/lint-php.sh",
-    "test": "npm run test:functions && npm run test:rules && npm run test:smoke && npm run test:smoke:mfa && npm run test:wp && npm run test:integrations && npm run test:browser && npm run test:web && npm run lint:php",
+    "test": "npm run test:functions && npm run test:indexes && npm run test:unit && npm run test:rules && npm run test:smoke && npm run test:smoke:mfa && npm run test:wp && npm run test:integrations && npm run test:browser && npm run test:web && npm run lint:php",
     "test:browser": "bash scripts/prepare-local.sh && bash scripts/local-env.sh npm --prefix tests run test:browser",
     "test:smoke:mfa": "bash scripts/prepare-local.sh && REQUIRE_ADMIN_MFA=true bash scripts/local-env.sh npm --prefix tests run test:smoke:mfa && REQUIRE_ADMIN_MFA=false bash scripts/local-env.sh npm --prefix tests run test:smoke:mfa && REQUIRE_ADMIN_MFA=warn bash scripts/local-env.sh npm --prefix tests run test:smoke:mfa",
     "test:wp": "bash scripts/prepare-local.sh && bash scripts/local-env.sh npm --prefix tests run test:wp",
-    "test:integrations": "bash scripts/prepare-local.sh && bash scripts/local-env.sh npm --prefix tests run test:integrations"
+    "test:integrations": "bash scripts/prepare-local.sh && bash scripts/local-env.sh npm --prefix tests run test:integrations",
+    "test:indexes": "node --test tests/indexes.test.mjs",
+    "test:unit": "node --experimental-strip-types --no-warnings --test tests/user-messages.test.mjs tests/engineer-profile.test.mjs tests/sound.test.mjs"
   }
 }

@@ -83,7 +83,7 @@ export const reviewEngineerApplication = callable(z.object({
     request_info: ['More information needed', 'Please open the app to see what we need.'],
     suspend: ['Account suspended', 'Open the app for details.'],
   }[d.decision]
-  await notify({ userId: d.engineerId, category: 'account', dedupeKey: `app-decision:${d.engineerId}:${d.decision}:${Date.now()}`, title: copy[0], body: copy[1], link: '/engineer/profile',
+  await notify({ userId: d.engineerId, category: 'account', dedupeKey: `app-decision:${d.engineerId}:${d.decision}:${Date.now()}`, title: copy[0], body: copy[1], link: d.decision === 'approve' || d.decision === 'reinstate' ? '/engineer/jobs' : '/engineer/profile',
     email: { subject: `Thor Computer: ${copy[0]}`, heading: copy[0], html: `<p>${copy[1]}</p>${d.note ? `<p><em>${p(d.note)}</em></p>` : ''}`, cta: 'Open Thor Computer' } })
   return { status: result.next }
 })

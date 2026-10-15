@@ -48,7 +48,7 @@ function AvailabilityEditor() {
   const rule = (d: string, patch: Partial<Rule>) => setA(s => ({ ...s, weekly: { ...s.weekly, [d]: { ...s.weekly[d], ...patch } } }))
   const addRange = () => { if (!from) return; const out: string[] = [], end = new Date((to || from) + 'T12:00:00'); for (let d = new Date(from + 'T12:00:00'); d <= end && out.length < 62; d.setDate(d.getDate() + 1)) out.push(d.toLocaleDateString('en-CA')); setA(s => ({ ...s, unavailableDates: [...new Set([...s.unavailableDates, ...out])].sort() })); setFrom(''); setTo('') }
   const bad = Object.values(a.weekly).some(r => r.enabled && r.start >= r.end)
-  const save = async () => { setBusy(true); try { await setDoc(doc(db, `engineerProfiles/${user!.uid}/private/availability`), { ...a, slotMinutes: 30 }); toast('ok', 'Availability saved.') } catch { toast('bad', 'Could not save availability.') } finally { setBusy(false) } }
+  const save = async () => { setBusy(true); try { await setDoc(doc(db, `engineerProfiles/${user!.uid}/private/availability`), { ...a, slotMinutes: 30 }); toast('ok', 'Availability saved.') } catch (e: any) { toast('bad', e?.code === 'permission-denied' ? 'You can set your availability once our team has approved your application.' : 'Could not save availability. Please try again.') } finally { setBusy(false) } }
   return (
     <Section title="My availability">
       <p className="mb-3 text-sm text-thor-text">Customers can only book inside these hours. Existing appointments are blocked automatically.</p>
@@ -64,4 +64,10 @@ function AvailabilityEditor() {
     </Section>)
 }
 
-export function EngineerAppointments() { return <><Appointments /><AvailabilityEditor /></> }
+/** Availability is only writable by approved engineers (database rules), so a pending engineer sees why instead of an editor that cannot save. */
+export function EngineerAppointments() {
+  const { approved } = useAuth()
+  return <><Appointments />{approved ? <AvailabilityEditor /> :
+    <Section title="My availability"><div role="status" className="rounded-2xl bg-thor-sky/20 p-5 text-sm"><p className="font-medium text-thor-blue-700">Available once you’re approved</p>
+      <p className="mt-1 text-thor-text">You’ll be able to set your working hours, breaks and days off as soon as our team approves your application. Customers can’t book you before then.</p></div></Section>}</>
+}

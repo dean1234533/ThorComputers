@@ -25,7 +25,7 @@ export default function NewRequest() {
   const [step, setStep] = useState(0)
   const [d, setD] = useState<Draft>(() => { try { return { ...EMPTY, ...JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? '{}') } } catch { return EMPTY } })
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([])
-  const [busy, setBusy] = useState(false); const [done, setDone] = useState<{ reference: string; jobId: string } | null>(null)
+  const [busy, setBusy] = useState(false); const [submitErr, setSubmitErr] = useState(''); const [done, setDone] = useState<{ reference: string; jobId: string } | null>(null)
   const [errs, setErrs] = useState<Record<string, string>>({})
   const key = useRef(rid() + rid())            // idempotency key: a double-tap or retry can never create two jobs
   const enquiry = qs.get('e') && qs.get('t') ? { id: qs.get('e')!, token: qs.get('t')! } : undefined
@@ -66,14 +66,14 @@ export default function NewRequest() {
   const addPhotos = (files: FileList | null) => { if (!files) return; const add = [...files].filter(f => f.type.startsWith('image/')).slice(0, 6 - photos.length).map(file => ({ file, url: URL.createObjectURL(file) })); setPhotos(p => [...p, ...add]) }
 
   const submit = async () => {
-    setBusy(true)
+    setBusy(true); setSubmitErr('')
     try {
       const paths = await Promise.all(photos.map((p, i) => uploadImage(`requests/${user!.uid}/${key.current}/${i}-${rid()}.jpg`, p.file)))
       const input: RequestInput = { requestKey: key.current, device: { type: d.device, manufacturer: d.manufacturer.trim(), model: d.model.trim(), os: d.os.trim() }, serialNumber: d.serial.trim(), issues: d.issues, description: d.description.trim(),
         startedAt: d.startedAt, urgency: d.urgency, serviceMethods: d.methods, postcode: d.postcode.trim().toUpperCase(), addressLine: d.addressLine.trim(), accessNotes: d.accessNotes.trim(), preferredDates: d.dates, photoPaths: paths, enquiry }
       const r = await api.createRepairRequest(input)
       sessionStorage.removeItem(DRAFT_KEY); setDone({ reference: r.reference, jobId: r.jobId })
-    } catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false) }
+    } catch (e) { const m = errMsg(e); setSubmitErr(m); toast('bad', m) } finally { setBusy(false) }   // the banner below stays until the next attempt; a toast alone disappears
   }
 
   if (done) return (
@@ -136,6 +136,7 @@ export default function NewRequest() {
           <p className="flex items-start gap-2 text-xs text-thor-text"><Check className="mt-0.5 size-4 shrink-0 text-ok" />Engineers see your device, problem and approximate area only. Your name, phone, address and serial number stay private.</p></>}
       </motion.div></AnimatePresence>
 
+      {submitErr && step === 5 && <div role="alert" className="mt-6 rounded-2xl border border-bad/30 bg-bad/10 p-4 text-sm text-bad"><p className="font-medium">Your request wasn’t sent</p><p>{submitErr}</p><p className="mt-1 text-thor-text">Your details are saved on this device, so you can press Submit again.</p></div>}
       <div className="safe-b sticky bottom-20 mt-8 md:bottom-4">
         {step < 5 ? <Button onClick={next} size="lg" className="w-full">Continue</Button> : <Button variant="cta" loading={busy} onClick={submit} size="lg" className="w-full">Submit request</Button>}
       </div>

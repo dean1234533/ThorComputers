@@ -35,7 +35,7 @@ try {
     onBackgroundMessage(getMessaging(fb), (payload) => {
       const d = payload.data ?? {}
       if (!d.title) return
-      return self.registration.showNotification(d.title, { body: d.body, tag: d.tag, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { link: d.link || '/' } })
+      return self.registration.showNotification(d.title, { body: d.body, tag: d.tag, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { link: d.link || '/' }, silent: false, vibrate: [200, 100, 200], renotify: true } as NotificationOptions)
     })
   }
 } catch (e) { console.warn('Push disabled in service worker:', e) }

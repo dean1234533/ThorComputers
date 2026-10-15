@@ -117,6 +117,11 @@ await step('first quotation → lead receiving_bids; acceptance → engineer_sel
   await cust.call('acceptQuote', { quoteId }); eq((await A.db.doc('metaLeads/L1').get()).data().status, 'engineer_selected')
   const j = (await A.db.doc(`repairRequests/${jobId}`).get()).data(); eq(j.commissionBps, 1500); eq(j.agreedTotalPence, 10000)
 })
+await step('after acceptance each side sees the other’s contact details; an engineer who was not chosen cannot', async () => {
+  const mine = (await getDoc(doc(eng.db, `repairRequests/${jobId}/private/details`))).data(); eq(mine.customerContact.email, LEAD_EMAIL); eq(mine.customerContact.name, 'Test customer')
+  const theirs = (await getDoc(doc(cust.db, `repairRequests/${jobId}/private/details`))).data(); eq(theirs.engineerContact.email, eng.addr)
+  const bidder = await person('bidder', 'engineer', { engineerApproved: true, specs: ['laptop'] }); await denied(getDoc(doc(bidder.db, `repairRequests/${jobId}/private/details`)), 'permission-denied')
+})
 await step('a lead that became a job cannot be rejected', async () => { await denied(adm.call('rejectMetaLead', { leadId: 'L1', reason: 'spam test' }), 'failed-precondition') })
 await step('an unconverted lead can be rejected with an audit trail', async () => { await adm.call('rejectMetaLead', { leadId: 'L2', reason: 'Spam test lead' }); eq((await A.db.doc('metaLeads/L2').get()).data().status, 'rejected'); ok((await A.db.collection('auditLogs').where('action', '==', 'lead.reject').get()).size >= 1) })
 await step('admin can correct a pending lead and it advances to awaiting_confirmation', async () => { const r = await adm.call('updateMetaLead', { leadId: 'L9', fields: { problem: 'Keyboard stopped responding entirely, tried restart' } }); eq(r.status, 'awaiting_confirmation') })

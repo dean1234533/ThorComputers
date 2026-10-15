@@ -34,7 +34,7 @@ export function decryptToken(blob: string, secret: string): string {
 export interface FinanceSettings { commissionBps: number; requirePaymentBeforeBooking: boolean; refundPolicy: string; cancellationPolicy: string }
 export interface MarketingSettings { requiredFields: string[]; defaultFeedsMarketplace: boolean; attributionWindowDays: number; maxDailyBudgetPence: number; maxBudgetChangePct: number; autoImport: boolean }
 export interface MarketplaceSettings { newRequestsEnabled: boolean; biddingEnabled: boolean; maxQuotesPerJob: number; maxQuoteValidityDays: number }
-export interface AiSettings { enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge: string }
+export interface AiSettings { enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge: string; model?: string }
 
 export const FINANCE_DEFAULTS: FinanceSettings = { commissionBps: 1500, requirePaymentBeforeBooking: false, refundPolicy: 'Refunds follow the engineer’s agreed terms and Thor Computer’s marketplace policy.', cancellationPolicy: '' }
 export const MARKETING_DEFAULTS: MarketingSettings = { requiredFields: ['name', 'email', 'postcode', 'problem'], defaultFeedsMarketplace: true, attributionWindowDays: 30, maxDailyBudgetPence: 5000, maxBudgetChangePct: 50, autoImport: true }

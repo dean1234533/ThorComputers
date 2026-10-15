@@ -35,3 +35,9 @@ test('changing repair states uses ordinary language', () => {
   assert.match(userMessage({ code: 'functions/failed-precondition', message: 'engineer cannot move a job from in_progress to engineer_selected.' }), /Refresh the page/)
   assert.match(userMessage({ message: 'Application is already info_requested.' }), /latest status/)
 })
+
+test('an unexpected server error shows the reference so support can find the log line, and never leaks internals', () => {
+  const m = userMessage({ code: 'functions/internal', message: 'Something went wrong on our side (ref EA1B2C3).' })
+  assert.match(m, /EA1B2C3/); assert.match(m, /try again/i); assert.doesNotMatch(m, /INTERNAL|index|FAILED_PRECONDITION/)
+  assert.doesNotMatch(userMessage({ code: 'functions/internal', message: 'INTERNAL' }), /INTERNAL/)
+})

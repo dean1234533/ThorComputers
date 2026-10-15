@@ -74,7 +74,7 @@ export const api = {
   adminMarketingStats: fn<{ from?: string; to?: string }, any>('adminMarketingStats'),
   // AI assistant
   chatbotMessage: fn<{ messages: { role: 'user' | 'assistant'; text: string }[] }, { reply: string; draft: Record<string, any> | null; ready: boolean; escalate: boolean; remainingToday: number }>('chatbotMessage'),
-  saveAiSettings: fn<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string }>('saveAiSettings'),
+  saveAiSettings: fn<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string; model?: string }>('saveAiSettings'),
   aiUsage: fn<object, { perDay: Record<string, { messages: number; users: number }> }>('aiUsage'),
 }
 

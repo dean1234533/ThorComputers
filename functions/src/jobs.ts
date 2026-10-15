@@ -43,8 +43,12 @@ export async function createRequestFor(customerId: string, d: z.infer<typeof Req
 
   const geo = await geocode(d.postcode)
   if (!geo) throw new HttpsError('invalid-argument', 'We could not find that postcode.')
-  const recent = await db.collection('repairRequests').where('customerId', '==', customerId).where('createdAt', '>', Timestamp.fromMillis(Date.now() - 86400_000)).count().get()
-  if (recent.data().count >= 10) throw new HttpsError('resource-exhausted', 'Daily request limit reached.')
+  // The orderBy matters: production serves this from the (customerId ASC, createdAt DESC) index. Without it the query needs an ASC index that was never deployed and
+  // every submission failed with FAILED_PRECONDITION (the emulator does not enforce indexes, so tests could not see it). Verified against the live database.
+  let recentCount = 0
+  try { recentCount = (await db.collection('repairRequests').where('customerId', '==', customerId).where('createdAt', '>', Timestamp.fromMillis(Date.now() - 86400_000)).orderBy('createdAt', 'desc').count().get()).data().count }
+  catch (e: any) { console.error('daily request limit check unavailable; allowing the request', { code: e?.code, message: String(e?.message).slice(0, 200) }) }   // abuse guard, not a security control: never block a customer because it errored
+  if (recentCount >= 10) throw new HttpsError('resource-exhausted', 'Daily request limit reached.')
 
   const reference = newRef()
   const requiredSpecs = requiredSpecsFor(d.device.type, d.issues)
@@ -176,9 +180,14 @@ export const acceptQuote = callable(z.object({ quoteId: z.string() }), async (re
     if (quote.expiresAt.toMillis() < Date.now()) throw new HttpsError('failed-precondition', 'This quote has expired. Ask the engineer to refresh it.')
     const prof = (await tx.get(db.doc(`engineerProfiles/${quote.engineerId}`))).data()
     if (prof?.status !== 'approved') throw new HttpsError('failed-precondition', 'This engineer is no longer available.')
+    const [custUser, engUser] = await Promise.all([tx.get(db.doc(`users/${c.uid}`)), tx.get(db.doc(`users/${quote.engineerId}`))])   // reads before writes
     const others = await tx.get(db.collection('repairQuotes').where('jobId', '==', quote.jobId).where('customerId', '==', c.uid).where('status', '==', 'submitted'))
     const losers: string[] = []
     others.docs.forEach(o => { if (o.id !== d.quoteId) { tx.update(o.ref, { status: 'declined', updatedAt: FieldValue.serverTimestamp() }); losers.push(o.data().engineerId); tx.update(db.doc(`conversations/${o.id}`), { closed: true }) } })
+    // Contact details are exchanged ONLY now, between the customer and the engineer they chose. Bidders and rejected engineers never get them (rules: private/details is
+    // readable by the customer, the selected engineer once the job is no longer open, and job admins).
+    const contact = (u?: FirebaseFirestore.DocumentData, fallback = '') => ({ name: String(u?.fullName ?? fallback), phone: String(u?.phone ?? ''), email: String(u?.email ?? '') })
+    tx.set(db.doc(`repairRequests/${quote.jobId}/private/details`), { customerContact: contact(custUser.data()), engineerContact: contact(engUser.data(), prof?.displayName), contactSharedAt: FieldValue.serverTimestamp() }, { merge: true })
     tx.update(qRef, { status: 'accepted', acceptedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() })
     tx.update(jRef, { status: 'engineer_selected', selectedEngineerId: quote.engineerId, acceptedQuoteId: d.quoteId, agreedTotalPence: quote.totalPence, commissionBps, agreedMethod: quote.serviceMethod, provider: quote.provider,
       statusHistory: FieldValue.arrayUnion({ status: 'engineer_selected', at: Timestamp.now(), by: c.uid }), updatedAt: FieldValue.serverTimestamp() })

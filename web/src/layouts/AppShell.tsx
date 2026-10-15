@@ -1,4 +1,4 @@
-import { useState, Suspense } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { NavLink, Outlet, useLocation, Link } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { Bell, MoreHorizontal, LogOut, ChevronRight, ArrowUpRight, Laptop } from 'lucide-react'
@@ -14,7 +14,7 @@ function useBadges() {
   const { user } = useAuth()
   const notifs = useQuery<{ read: boolean }>(user ? 'notifications' : null, () => [where('userId', '==', user!.uid), where('read', '==', false), limit(99)], [user?.uid])
   const convs = useQuery<{ unread?: Record<string, number> }>(user ? 'conversations' : null, () => [where('participants', 'array-contains', user!.uid), orderBy('lastMessageAt', 'desc'), limit(50)], [user?.uid])
-  return { notifications: notifs.data.length, messages: convs.data.reduce((n, c) => n + (c.unread?.[user!.uid] ?? 0), 0) }
+  return { notifications: notifs.data.length, messages: convs.data.reduce((n, c) => n + (c.unread?.[user!.uid] ?? 0), 0), ready: !notifs.loading && !convs.loading }
 }
 
 const Badge = ({ n }: { n: number }) => n > 0 ? (
@@ -22,10 +22,18 @@ const Badge = ({ n }: { n: number }) => n > 0 ? (
     className="absolute -right-2 -top-1.5 grid min-w-5 place-items-center rounded-full bg-thor-orange px-1 text-[11px] font-bold leading-5 text-ink" aria-label={`${n} unread`}>{n > 99 ? '99+' : n}</motion.span>) : null
 
 import ChatWidget from '@/components/ChatWidget'
+import { playChime, unlockAudio } from '@/lib/sound'
 
 export default function AppShell() {
   const { role, profile, signOut, can } = useAuth()
   const badges = useBadges()
+  const seen = useRef<{ n: number; m: number } | null>(null)
+  useEffect(() => { unlockAudio() }, [])
+  useEffect(() => {          // the first snapshot only records what is already unread; later increases are new arrivals
+    if (!badges.ready) return
+    if (seen.current && (badges.notifications > seen.current.n || badges.messages > seen.current.m)) playChime()
+    seen.current = { n: badges.notifications, m: badges.messages }
+  }, [badges.ready, badges.notifications, badges.messages])
   const loc = useLocation()
   const [more, setMore] = useState(false)
   const items = NAV[role ?? 'customer'].filter(i => !i.perm || can(i.perm))

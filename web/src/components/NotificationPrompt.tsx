@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { BellRing } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
@@ -13,15 +14,18 @@ export default function NotificationPrompt() {
   const toast = useToast()
   const [show, setShow] = useState(false)
   const [busy, setBusy] = useState(false)
+  const { pathname } = useLocation()
+  const inForm = /new-request|\/engineer\/(jobs|onboarding|profile)|^\/messages/.test(pathname)   // never pop up over a form's Submit/Send bar
 
   useEffect(() => {
+    if (inForm) { setShow(false); return }
     if (!user || permission() !== 'default' || pushDismissedRecently()) return
     // Don't stack two prompts: wait until the install banner has been handled (installed, dismissed, or not offered).
     if (installable && !dismissedRecently()) return
     let live = true
     pushSupport().then(s => { if (live && s === 'ok') setTimeout(() => live && setShow(true), 4000) })
     return () => { live = false }
-  }, [user, installable, standalone])
+  }, [user, installable, standalone, inForm])
 
   const enable = async () => {
     setBusy(true)

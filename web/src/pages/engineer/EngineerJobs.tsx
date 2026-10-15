@@ -114,10 +114,19 @@ export function MyJobs() {
         <ul className="space-y-3">{j.data.map(x => <li key={x.id}><Link to={`/engineer/my-jobs/${x.id}`} className="flex items-center gap-4 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.device.manufacturer} {x.device.model}</p><p className="truncate text-sm text-thor-text">{x.reference} · {x.location.area}</p></div><StatusPill status={x.status} /></Link></li>)}</ul>}</div>)
 }
 
+/** Contact details are released only after the customer accepts this engineer's quote. Tap to call or email; the in-app chat stays available. */
+export function ContactCard({ c, who, messageTo }: { c?: { name: string; phone: string; email: string }; who: 'customer' | 'engineer'; messageTo?: string }) {
+  if (!c || (!c.phone && !c.email)) return <p className="rounded-2xl bg-white p-4 text-sm text-thor-text shadow-sm ring-1 ring-ink/5">Contact details aren’t on this job yet. {messageTo ? 'You can still use the in-app chat.' : ''}</p>
+  return <div className="space-y-2 rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-ink/5"><p className="font-medium">{c.name || (who === 'customer' ? 'Customer' : 'Engineer')}</p>
+    {c.phone && <p><span className="text-thor-text">Phone: </span><a className="font-medium text-thor-blue underline" href={`tel:${c.phone.replace(/\s+/g, '')}`}>{c.phone}</a></p>}
+    {c.email && <p><span className="text-thor-text">Email: </span><a className="font-medium text-thor-blue underline" href={`mailto:${c.email}`}>{c.email}</a></p>}
+    <p className="text-xs text-thor-text">Shared only because this job was accepted. Please use them only for this repair.</p></div>
+}
+
 export function MyJobDetail() {
   const { id } = useParams(); const toast = useToast()
   const { data: job, loading } = useDoc<Job>(`repairRequests/${id}`)
-  const priv = useDoc<{ addressLine?: string; postcode: string; accessNotes?: string; serialNumber?: string }>(job && job.status !== 'open' ? `repairRequests/${id}/private/details` : null)
+  const priv = useDoc<{ addressLine?: string; postcode: string; accessNotes?: string; serialNumber?: string; customerContact?: { name: string; phone: string; email: string } }>(job && job.status !== 'open' ? `repairRequests/${id}/private/details` : null)
   const [busy, setBusy] = useState(''); const [rev, setRev] = useState(false)
   const done = useDoc(job && ['completed', 'closed'].includes(job.status) ? `reviews/${id}_engineer_to_customer` : null)
   if (loading) return <ListSkeleton rows={2} />
@@ -128,6 +137,7 @@ export function MyJobDetail() {
     <div className="max-w-2xl"><div className="mb-1 flex items-center gap-3"><p className="text-sm text-thor-text">{job.reference}</p><StatusPill status={job.status} /></div>
       <h1 className="font-display text-3xl">{job.device.manufacturer} {job.device.model}</h1>
       <Section title="Update progress">{next.length ? <div className="flex flex-wrap gap-2">{next.map(s => <Button key={s} variant={s === 'completed' ? 'cta' : 'primary'} loading={busy === s} onClick={() => go(s)}>{s === 'completed' ? 'Mark repair completed' : JOB_STATUS_LABEL[s]}</Button>)}</div> : <p className="text-sm text-thor-text">{job.status === 'engineer_selected' ? 'Waiting for the customer to book an appointment.' : 'No further updates available.'}</p>}</Section>
+      <Section title="Customer contact"><ContactCard c={priv.data?.customerContact} who="customer" messageTo={job.acceptedQuoteId ? `/messages/${job.acceptedQuoteId}` : undefined} /></Section>
       <Section title="Payment & extra work"><p className="mb-3 flex items-center gap-2 text-sm">Customer payment: {(job as { paymentStatus?: string }).paymentStatus === 'paid' ? <span className="rounded-full bg-ok/15 px-2.5 py-0.5 font-medium text-ok">Paid</span> : <span className="rounded-full bg-warn/15 px-2.5 py-0.5 font-medium text-warn">Not paid yet</span>}</p><ExtraWorkForm jobId={job.id} status={job.status} /></Section>
       <Section title="Job details"><p className="whitespace-pre-line">{job.description}</p>
         <dl className="mt-4 space-y-2 rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-ink/5"><div className="flex justify-between"><dt className="text-thor-text">Agreed price</dt><dd className="font-bold">{gbp(job.agreedTotalPence ?? 0)}</dd></div>

@@ -73,6 +73,10 @@ export function userMessage(error: unknown): string {
   const raw = typeof record.message === 'string' ? record.message : typeof error === 'string' ? error : ''
   const message = raw.replace(/^Firebase:\s*/i, '').replace(/\s*\((?:auth|functions|storage|firestore)\/[\w-]+\)\.?$/, '').trim()
   if (Object.hasOwn(messages, message)) return messages[message]
+  const ref = message.match(/\(ref (E[0-9A-F]{6})\)/)?.[1]
+  if (ref) return `We hit a problem on our side and couldn’t finish that. Please try again in a minute. If it keeps happening, contact Thor Computer and quote reference ${ref}.`
+  if (/paused for a short while/.test(message)) return message
+  if (/maximum number of quotations/.test(message)) return 'This repair has received the maximum number of quotes, so no more can be added.'
   if (/mfa-required|multi-factor authentication is required/i.test(message)) return 'Open Security and set up two-step verification, then sign in again.'
   if (/^Missing permission:|^Requires \w+ account\./.test(message)) return 'Your account can’t make this change. Please contact an administrator.'
   if (/^Ratings required:/.test(message)) return 'Please give a star rating for every category.'

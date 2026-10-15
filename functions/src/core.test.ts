@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { CallableRequest } from 'firebase-functions/v2/https'
-import { stripNulls, requireRole, requirePerm, adminMfaMode } from './core'
+import { stripNulls, requireRole, requirePerm, adminMfaMode, internalError } from './core'
 
 const req = (token: Record<string, unknown>) => ({ auth: { uid: 'u1', token }, data: {} }) as unknown as CallableRequest
 const admin = { role: 'admin', perms: ['settings.edit'], email_verified: true }
@@ -30,4 +30,14 @@ test('MFA enforce never affects non-admin roles, and skipMfa lets an unenrolled 
 })
 test('permission checks still apply when MFA passes', () => {
   mode('true'); assert.throws(() => requirePerm(req(withMfa), 'admins.manage'), (e: any) => /Missing permission/.test(e.message))
+})
+
+test('unexpected errors become a reference-only client message; the real cause stays in the log', () => {
+  const logged: string[] = []; const orig = console.error; console.error = (...a: unknown[]) => { logged.push(a.join(' ')) }
+  try {
+    const e = internalError(Object.assign(new Error('9 FAILED_PRECONDITION: The query requires an index. https://console.firebase.google.com/...'), { code: 9 }), 'createrepairrequest', 'user123456789')
+    assert.equal(e.code, 'internal'); assert.match(e.message, /^Something went wrong on our side \(ref E[0-9A-F]{6}\)\.$/)
+    assert.doesNotMatch(e.message, /index|FAILED_PRECONDITION|console\.firebase/)
+    const line = JSON.parse(logged[0]); assert.equal(line.ref, e.message.match(/E[0-9A-F]{6}/)![0]); assert.match(line.error, /requires an index/); assert.equal(line.where, 'createrepairrequest'); assert.ok(!line.uid.includes('user123456789'), 'uid must be shortened in logs')
+  } finally { console.error = orig }
 })

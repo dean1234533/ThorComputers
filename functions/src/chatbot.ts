@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { db, callable, requireRole, requirePerm, audit, FieldValue, HttpsError } from './core'
-import { MOCK, getAiSettings, getFinanceSettings } from './external'
+import { MOCK, getAiSettings, getFinanceSettings, health } from './external'
 import { normalisePostcode, normaliseDevice, normaliseMethod } from './integrations-domain'
 
 const AI_SECRETS = ['GEMINI_API_KEY']
@@ -37,18 +37,34 @@ function mockReply(text: string): z.infer<typeof Reply> {
   return { reply: device ? 'What is your postcode, and what make and model is it?' : 'What device needs repairing, and what is it doing?', draft: null, ready: false, escalate: false }
 }
 
-async function gemini(system: string, msgs: z.infer<typeof Msg>[]): Promise<z.infer<typeof Reply>> {
-  const key = process.env.GEMINI_API_KEY
-  if (!key) throw new HttpsError('failed-precondition', 'The assistant is not configured yet.')
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 600 } }),
-  })
-  if (!r.ok) { console.error('gemini error', r.status); throw new HttpsError('unavailable', 'The assistant is busy. Please try again, or contact support.') }
-  const body: any = await r.json()
-  try { return Reply.parse(JSON.parse(body.candidates[0].content.parts[0].text)) }
-  catch { return { reply: 'Sorry, I didn’t catch that. Could you rephrase?', draft: null, ready: false, escalate: false } }
+export interface GeminiDeps { fetchImpl?: typeof fetch; record?: (ok: boolean, detail: string) => Promise<void> | void; models?: string[] }
+const FALLBACK_MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash']
+
+/** Calls Gemini, trying the configured model first and then known aliases when a model name is unknown/retired. The real failure reason (never the key) is recorded for admins
+ *  (integrationHealth/gemini) because Cloud Logging may not be readable; customers only ever see a generic message. */
+export async function callGemini(system: string, msgs: z.infer<typeof Msg>[], deps: GeminiDeps = {}): Promise<z.infer<typeof Reply>> {
+  const key = process.env.GEMINI_API_KEY, doFetch = deps.fetchImpl ?? fetch, record = deps.record ?? (async (ok: boolean, d: string) => { await health('gemini', ok, d).catch(() => {}) })
+  if (!key || key === 'not-set-yet') { await record(false, 'GEMINI_API_KEY is not set'); throw new HttpsError('failed-precondition', 'The assistant is not set up yet. Please contact support.') }
+  const body = JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: msgs.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] })),
+    generationConfig: { responseMimeType: 'application/json', temperature: 0.3, maxOutputTokens: 600 } })
+  const models = [...new Set([...(deps.models ?? []), MODEL, ...FALLBACK_MODELS].filter(Boolean))]
+  let last = ''
+  for (const model of models) {
+    const r = await doFetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body })
+    if (r.ok) {
+      await record(true, `ok (${model})`)
+      const j: any = await r.json()
+      try { return Reply.parse(JSON.parse(j.candidates[0].content.parts[0].text)) } catch { return { reply: 'Sorry, I didn’t catch that. Could you rephrase?', draft: null, ready: false, escalate: false } }
+    }
+    const err: any = (await r.json().catch(() => ({})))?.error ?? {}
+    last = `${model}: HTTP ${r.status} ${err.status ?? ''} ${String(err.message ?? '').slice(0, 160)}`.trim()
+    console.error('gemini error', last)
+    if (r.status === 404 || /not found|not supported|deprecated|no longer available/i.test(String(err.message))) continue    // unknown/retired model name: try the next alias
+    break                                                                                                                   // key, permission, quota or safety problems will not be fixed by another model
+  }
+  await record(false, last)
+  if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED|403|401/i.test(last)) throw new HttpsError('failed-precondition', 'The assistant is not set up correctly yet. Please contact support.')
+  throw new HttpsError('unavailable', 'The assistant is busy. Please try again, or contact support.')
 }
 
 export const chatbotMessage = callable(z.object({ messages: z.array(Msg).min(1).max(12) }), async (req, d) => {
@@ -67,7 +83,7 @@ export const chatbotMessage = callable(z.object({ messages: z.array(Msg).min(1).
   const jobs = await db.collection('repairRequests').where('customerId', '==', c.uid).orderBy('createdAt', 'desc').limit(5).get()
   const facts = JSON.stringify(jobs.docs.map(j => ({ reference: j.data().reference, status: j.data().status, device: j.data().device?.type, quotesReceived: j.data().quoteCount ?? 0, paid: j.data().paymentStatus === 'paid' })))
   const fin = await getFinanceSettings()
-  const out = MOCK() ? mockReply(d.messages[d.messages.length - 1].text) : await gemini(SYSTEM(facts, ai.escalation, `${ai.knowledge}\nRefund policy: ${fin.refundPolicy}`.slice(0, 3000)), d.messages)
+  const out = MOCK() ? mockReply(d.messages[d.messages.length - 1].text) : await callGemini(SYSTEM(facts, ai.escalation, `${ai.knowledge}\nRefund policy: ${fin.refundPolicy}`.slice(0, 3000)), d.messages, { models: ai.model ? [ai.model] : [] })
   // Whatever the model says, only well-formed, allow-listed values reach the form.
   const dr = out.draft ?? null
   const draft = dr && {
@@ -78,7 +94,7 @@ export const chatbotMessage = callable(z.object({ messages: z.array(Msg).min(1).
   return { reply: out.reply, draft: draft && Object.values(draft).some(Boolean) ? draft : null, ready: !!out.ready && !!draft?.device && !!draft?.postcode && !!draft?.problem, escalate: out.escalate, remainingToday: Math.max(0, ai.dailyLimit - used) }
 }, { secrets: AI_SECRETS })
 
-export const saveAiSettings = callable(z.object({ enabled: z.boolean(), welcome: z.string().trim().max(400), dailyLimit: z.number().int().min(1).max(500), escalation: z.string().trim().max(400), knowledge: z.string().max(3000).optional().default('') }), async (req, d) => {
+export const saveAiSettings = callable(z.object({ enabled: z.boolean(), welcome: z.string().trim().max(400), dailyLimit: z.number().int().min(1).max(500), escalation: z.string().trim().max(400), knowledge: z.string().max(3000).optional().default(''), model: z.string().trim().max(60).regex(/^[a-z0-9.\-]*$/).optional().default('') }), async (req, d) => {
   const c = requirePerm(req, 'ai.manage')
   await db.doc('platformSettings/ai').set({ ...d, updatedBy: c.uid, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
   await db.doc('platformSettings/public').set({ ai: { enabled: d.enabled, welcome: d.welcome, escalation: d.escalation } }, { merge: true })   // only the customer-facing bits are public

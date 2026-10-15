@@ -10,6 +10,7 @@ import QuoteCompare, { Quote, engName } from '@/components/QuoteCompare'
 import StatusTracker from '@/components/StatusTracker'
 import BookingPanel from '@/components/BookingPanel'
 import PaymentPanel from '@/components/PaymentPanel'
+import { ContactCard } from '@/pages/engineer/EngineerJobs'
 import ReviewSheet from '@/components/ReviewSheet'
 import { ProviderTerms } from '@/components/ProviderNote'
 import { Avatar, Button, EmptyState, ListSkeleton, Section, Sheet, StatusPill, useToast } from '@/components/ui'
@@ -21,7 +22,7 @@ export interface Job { reference: string; status: JobStatus; device: { type: str
 export default function RepairDetail() {
   const { id } = useParams(); const nav = useNavigate(); const { user } = useAuth(); const toast = useToast()
   const { data: job, loading } = useDoc<Job>(`repairRequests/${id}`)
-  const priv = useDoc<{ addressLine?: string; postcode: string; serialNumber?: string }>(job ? `repairRequests/${id}/private/details` : null)
+  const priv = useDoc<{ addressLine?: string; postcode: string; serialNumber?: string; engineerContact?: { name: string; phone: string; email: string } }>(job ? `repairRequests/${id}/private/details` : null)
   const quotes = useQuery<Quote>(job ? 'repairQuotes' : null, () => [where('jobId', '==', id), where('customerId', '==', user!.uid), orderBy('createdAt', 'desc')], [id, user?.uid, !!job])
   const appt = useDoc<{ startAt: { toDate(): Date }; status: string; id: string; durationMinutes: number }>(job?.status && ['appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts', 'completed', 'closed'].includes(job.status) ? `appointments/apt_${id}` : null)
   const eng = useEngineers(job?.selectedEngineerId ? [job.selectedEngineerId] : [])
@@ -53,6 +54,7 @@ export default function RepairDetail() {
               <Avatar src={e?.photoURL} name={engName(e)} size={56} /><div className="min-w-0 flex-1"><p className="font-display text-lg">{engName(e)}</p><Link to={`/engineers/${job.selectedEngineerId}`} className="text-sm text-thor-blue hover:underline">View profile</Link></div>
               <div className="text-right"><p className="font-display text-xl text-thor-blue">{gbp(job.agreedTotalPence ?? 0)}</p><p className="text-xs text-thor-text">{SERVICE_METHODS.find(m => m.id === job.agreedMethod)?.label}</p></div></div>
             {accepted && <div className="mt-3"><ProviderTerms provider={accepted.provider} /></div>}
+            <div className="mt-3"><ContactCard c={priv.data?.engineerContact} who="engineer" messageTo={`/messages/${job.acceptedQuoteId}`} /></div>
             <Link to={`/messages/${job.acceptedQuoteId}`} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-thor-blue"><MessageSquare className="size-4" />Message your engineer</Link></Section>}
 
           {job.acceptedQuoteId && !['cancelled'].includes(job.status) && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} /></Section>}

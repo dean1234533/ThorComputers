@@ -15,6 +15,7 @@ const Toggle = ({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
   <button role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? 'bg-thor-blue' : 'bg-ink/20'}`}><span className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-all ${on ? 'left-[22px]' : 'left-0.5'}`} /></button>)
 
 import StripeConnectCard from '@/components/StripeConnectCard'
+import { playChime, setSoundEnabled, soundEnabled } from '@/lib/sound'
 
 export default function Settings() {
   const { user, profile, signOut, role } = useAuth(); const toast = useToast(); const inst = useInstall()
@@ -33,6 +34,7 @@ export default function Settings() {
     <div className="max-w-2xl"><PageHeader title="Settings" />
       {role === 'engineer' && <Section title="Payments"><StripeConnectCard /></Section>}
       <Section title="Notifications">
+        <SoundRow />
         <div className="mb-4 flex items-center gap-3 surface p-5"><Bell className="size-6 text-thor-blue" />
           <div className="flex-1"><p className="font-medium">Push notifications on this device</p><p className="text-sm text-thor-text">{support === 'ios-needs-install' ? 'On iPhone and iPad, install the app to your Home Screen first.' : support === 'unsupported' ? 'Not supported by this browser.' : perm === 'denied' ? 'Blocked. Allow notifications for this site in your browser settings.' : perm === 'granted' ? 'On' : 'Off'}</p></div>
           {support === 'ok' && perm !== 'denied' && <Toggle on={perm === 'granted'} onChange={togglePush} label="Push notifications" />}</div>
@@ -49,4 +51,11 @@ export default function Settings() {
       <Sheet open={del} onClose={() => setDel(false)} title="Delete your account?"><p className="mb-4 text-sm text-thor-text">This erases your profile, contact details, photos and documents. Completed jobs are kept anonymously so the other party’s records remain accurate. It can’t be undone. Type <b>DELETE</b> to confirm.</p><Input label="Confirmation" value={confirmTxt} onChange={e => setConfirmTxt(e.target.value)} /><Button variant="danger" className="mt-4 w-full" disabled={confirmTxt !== 'DELETE'} onClick={remove}>Delete permanently</Button></Sheet>
       <Sheet open={steps} onClose={() => setSteps(false)} title="Install Thor Computer"><InstallSteps /><p className="mt-4 text-xs text-thor-text">On Android or desktop Chrome/Edge, use the browser menu and choose “Install app”.</p></Sheet>
     </div>)
+}
+
+function SoundRow() {
+  const [on, setOn] = useState(soundEnabled())
+  return <div className="mb-4 flex flex-wrap items-center gap-3 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">Sound for new notifications</p><p className="text-sm text-thor-text">Plays a short chime when a quote, message or update arrives while the app is open. Alerts when the app is closed use your phone’s own notification sound.</p></div>
+    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={on} onChange={e => { setOn(e.target.checked); setSoundEnabled(e.target.checked); if (e.target.checked) playChime(true) }} className="size-5 accent-thor-blue" />On</label>
+    <button type="button" onClick={() => playChime(true)} className="rounded-xl px-3 py-2 text-sm font-medium text-thor-blue ring-1 ring-thor-blue/30">Play test sound</button></div>
 }

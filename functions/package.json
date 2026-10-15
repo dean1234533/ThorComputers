@@ -7,7 +7,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test lib/domain.test.js lib/core.test.js lib/money.test.js",
+    "test": "tsc && node --test lib/domain.test.js lib/core.test.js lib/money.test.js lib/chatbot.test.js",
     "serve": "npm run build && firebase emulators:start --only functions"
   },
   "dependencies": {

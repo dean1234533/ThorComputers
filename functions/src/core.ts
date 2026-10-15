@@ -5,6 +5,7 @@ import { getMessaging } from 'firebase-admin/messaging'
 import { HttpsError, CallableRequest, onCall } from 'firebase-functions/v2/https'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { z, ZodTypeAny } from 'zod'
+import { randomBytes } from 'node:crypto'
 import { sendEmail } from './email'
 
 initializeApp()
@@ -24,8 +25,17 @@ export const callable = <T extends ZodTypeAny, R>(schema: T, fn: (req: CallableR
     const parsed = schema.safeParse(stripNulls(req.data ?? {}))
     if (!parsed.success) throw new HttpsError('invalid-argument', parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join('; '))
     if (req.auth) await assertAccountCurrent(req)
-    return fn(req, parsed.data)
+    try { return await fn(req, parsed.data) }
+    catch (e) { if (e instanceof HttpsError) throw e; throw internalError(e, process.env.K_SERVICE ?? 'callable', req.auth?.uid) }
   })
+
+/** Anything that is not an HttpsError would reach the browser as a bare "INTERNAL". Log the real cause (never sent to the client) and give the user a reference to quote. */
+export function internalError(e: unknown, where: string, uid?: string): HttpsError {
+  const ref = 'E' + randomBytes(3).toString('hex').toUpperCase()
+  const err = e as { code?: unknown; message?: unknown; stack?: unknown }
+  console.error(JSON.stringify({ severity: 'ERROR', message: 'unexpected callable failure', ref, where, uid: uid ? uid.slice(0, 6) + '…' : null, code: err?.code ?? null, error: String(err?.message ?? e).slice(0, 400), stack: String(err?.stack ?? '').split('\n').slice(0, 6).join(' | ') }))
+  return new HttpsError('internal', `Something went wrong on our side (ref ${ref}).`)
+}
 
 /** ID tokens live up to an hour, so claims alone can be stale: a suspended user or a demoted admin would keep working until the token refreshed.
  *  One cheap read per call makes suspension/demotion take effect immediately for every callable. (Firestore/Storage rules still read the token claims.) */

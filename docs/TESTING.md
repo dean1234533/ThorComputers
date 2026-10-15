@@ -15,6 +15,9 @@ Last run: 2026-10-11, macOS arm64, Node 24, JDK 21, PHP 8.3.32 (static build), h
 | Type safety and build | `npm run test:web` | clean | Build success only |
 | PHP syntax | `npm run lint:php` | clean on 8.3 | Syntax only. **Not run on 7.4**, though the plugin declares 7.4+ and uses no 8-only syntax |
 
+## Lesson: the emulator does not enforce Firestore indexes
+A query with no matching composite index passes every emulator test and then fails in production. This broke repair submission (HTTP 500), the Appointments page and the Quotations page, with failed list queries showing as *empty lists*. `npm run test:indexes` now derives the index every query in `functions/src` and `web/src` needs (direction included) and fails if `firestore.indexes.json` lacks it. After deploying indexes, wait until they are *Enabled* before retesting.
+
 ## Bugs found and fixed by this pass (all would have hit production)
 1. `reviewEngineerApplication` (approve): Firestore transaction read after write → every approval failed with INTERNAL.
 2. `editReview` and `moderateReview`: same read-after-write error.

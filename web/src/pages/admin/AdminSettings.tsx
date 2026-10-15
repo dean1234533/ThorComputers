@@ -51,15 +51,17 @@ function PromoteForm() {
 }
 
 function AiSettingsPanel() {
-  const toast = useToast(); const d = useDoc<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string }>('platformSettings/ai')
-  const [v, setV] = useState({ enabled: true, welcome: 'Hi, I’m the Thor Computer assistant. I can help you describe a repair, understand quotes, or find support.', dailyLimit: 40, escalation: 'Please contact our support team.', knowledge: '' }), [busy, setBusy] = useState(false), [usage, setUsage] = useState<Record<string, { messages: number; users: number }>>({})
-  useEffect(() => { if (d.data) setV(x => ({ ...x, ...d.data!, knowledge: d.data!.knowledge ?? '' })) }, [d.data])
+  const toast = useToast(); const d = useDoc<{ enabled: boolean; welcome: string; dailyLimit: number; escalation: string; knowledge?: string; model?: string }>('platformSettings/ai'); const gh = useDoc<{ ok: boolean; detail: string; at?: { toDate(): Date } }>('integrationHealth/gemini')
+  const [v, setV] = useState({ enabled: true, welcome: 'Hi, I’m the Thor Computer assistant. I can help you describe a repair, understand quotes, or find support.', dailyLimit: 40, escalation: 'Please contact our support team.', knowledge: '', model: '' }), [busy, setBusy] = useState(false), [usage, setUsage] = useState<Record<string, { messages: number; users: number }>>({})
+  useEffect(() => { if (d.data) setV(x => ({ ...x, ...d.data!, knowledge: d.data!.knowledge ?? '', model: d.data!.model ?? '' })) }, [d.data])
   useEffect(() => { api.aiUsage({}).then(r => setUsage(r.perDay)).catch(() => {}) }, [])
   const save = async () => { setBusy(true); try { await api.saveAiSettings(v); toast('ok', 'Assistant settings saved.') } catch (e) { toast('bad', errMsg(e)) } finally { setBusy(false) } }
   return <Section title="AI assistant"><div className="surface space-y-4 p-5 text-sm">
     <label className="flex items-center gap-2"><input type="checkbox" checked={v.enabled} onChange={e => setV({ ...v, enabled: e.target.checked })} />Show the assistant to customers</label>
     <Textarea label="Welcome message" value={v.welcome} onChange={e => setV({ ...v, welcome: e.target.value })} />
     <div className="grid gap-4 sm:grid-cols-2"><Input label="Messages per customer per day" type="number" min="1" max="500" value={v.dailyLimit} onChange={e => setV({ ...v, dailyLimit: Number(e.target.value) })} /></div>
+    <div className="rounded-xl bg-paper p-3" role="status">Connection to Gemini: {gh.data ? <b className={gh.data.ok ? 'text-ok' : 'text-bad'}>{gh.data.ok ? 'working' : 'problem'}</b> : 'not tested yet'}{gh.data && <span className="text-thor-text"> · {gh.data.detail}{gh.data.at ? ` · ${gh.data.at.toDate().toLocaleString('en-GB')}` : ''}</span>}</div>
+    <Input label="Gemini model (optional)" hint="Leave empty to use the default. If the connection says a model was not found, enter a current model name from Google AI Studio." value={v.model} onChange={e => setV({ ...v, model: e.target.value.trim() })} />
     <Textarea label="Human support / escalation wording" value={v.escalation} onChange={e => setV({ ...v, escalation: e.target.value })} />
     <Textarea label="Approved knowledge (FAQs, policies the assistant may rely on)" hint="Plain text. It will not invent anything outside this and your public settings." value={v.knowledge} onChange={e => setV({ ...v, knowledge: e.target.value })} />
     <p className="text-xs text-thor-text">Conversations are not stored; only message counts per day. The assistant cannot create jobs, take payments or change accounts, and it never sees other customers’ data.</p>

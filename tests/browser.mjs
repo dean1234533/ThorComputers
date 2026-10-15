@@ -120,7 +120,22 @@ await step('customer completes the request wizard in the UI and the job appears'
   await fillLabel(cust.page, 'Describe', 'Keyboard stopped responding after a Windows update.'); await clickText(cust.page, 'Continue')
   await clickText(cust.page, 'Home visit', '[role=checkbox]').catch(() => clickText(cust.page, 'home', '[role=checkbox]')); await clickText(cust.page, 'Continue')
   await clickText(cust.page, 'Continue')   // postcode prefilled from the profile
+  // A server failure must leave a PERSISTENT, actionable message (a toast alone vanishes), keep the draft, and a retry must work. The first callable POST is forced to fail with
+  // the reference message the backend now returns for unexpected errors.
+  let failOnce = true; await cust.page.setRequestInterception(true)
+  cust.page.on('request', r => {
+    if (r.isInterceptResolutionHandled()) return
+    if (failOnce && r.method() === 'POST' && r.url().includes('/createRepairRequest')) { failOnce = false; r.respond({ status: 500, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ error: { message: 'Something went wrong on our side (ref EA1B2C3).', status: 'INTERNAL' } }) }) }
+    else r.continue()
+  })
   await clickText(cust.page, 'Submit request')
+  await cust.page.waitForFunction(() => document.querySelector('[role=alert]')?.textContent.includes('EA1B2C3'), { timeout: 10000 })
+  await sleep(6500)                                   // longer than any toast
+  ok((await cust.page.evaluate(() => document.querySelector('[role=alert]')?.textContent ?? '')).includes('Your request wasn’t sent'), 'error banner disappeared')
+  ok(!(await bodyText(cust.page)).includes('Request submitted'), 'a failed submission must not look successful')
+  const cover = await cust.page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /submit request/i.test(x.textContent)); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e === b || b.contains(e) ? null : `${e?.tagName}: ${(e?.textContent || '').slice(0, 50)}` })
+  ok(!cover, `something covers the Submit button on mobile: ${cover}`)   // regression: the notification prompt used to sit on top of it
+  await clickText(cust.page, 'Submit request')        // same draft, same idempotency key
   await cust.page.waitForFunction(() => document.body.innerText.includes('Request submitted'), { timeout: 20000 }).catch(async e => { throw new Error(`${e.message} | page says: ${(await bodyText(cust.page)).replace(/\s+/g, ' ').slice(0, 400)} | console: ${cust.lines.filter(l => l.includes('callable')).join(' // ').slice(0, 400)}`) })
   await visit(cust, '/customer/repairs'); ok((await bodyText(cust.page)).includes('ThinkPad'), 'new job not listed')
 })
@@ -141,12 +156,19 @@ await step('unapproved engineer can reach onboarding but sees no available jobs'
   await login(pend, 'pending-engineer@demo.test'); await visit(pend, '/engineer/profile'); await visit(pend, '/engineer/jobs')
   ok(!(await bodyText(pend.page)).includes('XPS 13'), 'unapproved engineer can see open jobs')
 })
+await step('unapproved engineer sees WHY availability is unavailable instead of an editor that cannot save', async () => {
+  await visit(pend, '/engineer/appointments', { mustContain: 'Available once you’re approved' })
+  ok(!(await pend.page.evaluate(() => [...document.querySelectorAll('button')].some(b => /save availability/i.test(b.textContent)))), 'a Save availability button is shown to an unapproved engineer')
+})
 
 console.log('\nAdmin (super admin) and support admin')
 const adm = await newSession('superadmin', false)
 await step('super admin signs in and lands on /admin', async () => { await login(adm, 'superadmin@demo.test'); ok(new URL(adm.page.url()).pathname === '/admin', adm.page.url()) })
 for (const p of ['/admin', '/admin/approvals', '/admin/customers', '/admin/engineers', '/admin/jobs', '/admin/quotations', '/admin/appointments', '/admin/reviews', '/admin/reports', '/admin/leads', '/admin/marketing', '/admin/finance', '/admin/settings', '/notifications', '/settings'])
   await step(`super admin ${p}`, () => visit(adm, p))
+await step('admin overview lists new repair requests live, with source and status', async () => {
+  await visit(adm, '/admin', { mustContain: 'New repair requests' }); const t = await bodyText(adm.page); ok(/THR-DEMO01|XPS 13|ThinkPad/.test(t), 'no incoming jobs shown on the overview')
+})
 await step('mobile admin navigation stays aligned at 320px and 390px', async () => {
   await visit(adm, '/admin')
   for (const width of [320, 390]) {

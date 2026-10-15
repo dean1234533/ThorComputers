@@ -25,6 +25,9 @@ interface RecentActivity { id: string; action: string; target: string; createdAt
 export function AdminOverview() {
   const [s, setS] = useState<any>(null); const [err, setErr] = useState('')
   const [activityAction, setActivityAction] = useState('')
+  const { can } = useAuth(); const canJobs = can('jobs.manage')
+  // Live: new repair requests appear here the moment a customer, the WordPress form or a Facebook/Instagram lead creates one.
+  const incoming = useQuery<{ reference: string; status: JobStatus; device: { manufacturer: string; model: string; type: string }; location: { area: string }; urgency: string; source?: string; quoteCount: number; createdAt?: { toDate(): Date } }>(canJobs ? 'repairRequests' : null, () => [orderBy('createdAt', 'desc'), limit(12)], [canJobs])
   useEffect(() => { api.adminStats({}).then(setS).catch(e => setErr(errMsg(e))) }, [])
   if (err) return <EmptyState icon={ShieldCheck} title="Can’t load stats" body={err} />
   const recentActivity: RecentActivity[] = s?.recentActivity ?? []
@@ -35,6 +38,12 @@ export function AdminOverview() {
   return (
     <div><PageHeader title="Overview" sub="How the marketplace is doing right now." />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{tiles.map(([l, v, I, to]) => <Link key={l} to={to} className="surface p-5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" />{s ? <p className="font-display text-3xl">{v}</p> : <Skeleton className="h-9 w-14" />}<p className="text-sm text-thor-text">{l}</p></Link>)}</div>
+      {canJobs && <Section title="New repair requests" action={<Link to="/admin/jobs" className="text-sm text-thor-blue">All requests</Link>}>
+        {incoming.loading ? <ListSkeleton rows={2} /> : incoming.data.length === 0 ? <p className="surface p-5 text-sm text-thor-text">No repair requests yet. New ones appear here instantly.</p> :
+          <ul className="divide-y divide-ink/8 surface px-5" aria-live="polite">{incoming.data.map(j => { const t = j.createdAt?.toDate(); const mins = t ? Math.max(0, Math.round((Date.now() - t.getTime()) / 60000)) : null
+            return <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="font-medium">{j.reference} · {j.device.manufacturer} {j.device.model}</p>
+              <p className="text-xs text-thor-text">{j.location?.area} · {mins === null ? 'just now' : mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)} h ago` : t!.toLocaleDateString('en-GB')} · {j.quoteCount ?? 0} quote(s)</p></div>
+              <div className="flex flex-wrap items-center gap-2">{j.urgency === 'urgent' && <Badge tone="bad">Urgent</Badge>}{j.source && j.source !== 'app' && <Badge tone="brand">{j.source === 'meta' ? 'Facebook/Instagram' : 'Website'}</Badge>}<StatusPill status={j.status} /></div></li> })}</ul>}</Section>}
       {s?.marketing && <Section title="Advertising"><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{([['Facebook leads', s.marketing.facebookLeads], ['Instagram leads', s.marketing.instagramLeads], ['Leads awaiting verification', s.marketing.leadsAwaitingVerification], ['Advertising spend', gbp(s.marketing.advertisingSpendPence)], ['Cost per lead', s.marketing.costPerLeadPence ? gbp(s.marketing.costPerLeadPence) : '—'], ['Advertising-generated jobs', s.marketing.advertisingJobs]] as [string, string | number][]).map(([l, v]) => <Link key={l} to="/admin/leads" className="surface p-4"><p className="text-xs text-thor-text">{l}</p><p className="font-display text-2xl">{v}</p></Link>)}</div></Section>}
       {s?.finance && <Section title="Money"><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{([['Transaction value', gbp(s.finance.transactionValuePence)], ['Thor commission', gbp(s.finance.commissionPence)], ['Engineer payouts', gbp(s.finance.engineerPayoutPence)], ['Outstanding payments', s.finance.outstandingPayments], ['Disputed transactions', s.finance.disputedTransactions], ['Advertising-generated revenue', gbp(s.finance.advertisingRevenuePence)]] as [string, string | number][]).map(([l, v]) => <Link key={l} to="/admin/finance" className="surface p-4"><p className="text-xs text-thor-text">{l}</p><p className="font-display text-2xl">{v}</p></Link>)}</div></Section>}
       {t && <p className="mt-4 text-sm text-thor-text">Also: {t.activeEngineers} active engineers · {t.awaitingBids} jobs awaiting quotations · {t.scheduled} scheduled appointments · {t.cancelled} cancelled repairs.</p>}
