@@ -1,13 +1,12 @@
-import { ReactNode, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { ReactNode, useState } from 'react'
 import { limit, orderBy, where, QueryConstraint } from 'firebase/firestore'
 import { getDownloadURL, ref } from 'firebase/storage'
-import { ExternalLink, FileText, ShieldCheck, Users, Wrench, ClipboardList, CalendarCheck, Flag, CheckCircle2, HardHat, Receipt } from 'lucide-react'
+import { ExternalLink, FileText, ShieldCheck, Users, Wrench, ClipboardList, CheckCircle2, Flag } from 'lucide-react'
 import { storage } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth'
 import { useQuery, WithId } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
-import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Section, Select, Sheet, Skeleton, Stars, StatusPill, Textarea, Input, useToast } from '@/components/ui'
+import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Select, Sheet, Stars, StatusPill, Textarea, Input, useToast } from '@/components/ui'
 import { gbp, JobStatus, SPECIALISATIONS } from '@/types/domain'
 
 // ---------- shared helpers ----------
@@ -20,49 +19,7 @@ function NoteSheet({ open, title, action, onClose, onSubmit, danger }: { open: b
   return <Sheet open={open} onClose={onClose} title={title}><Textarea label="Note (recorded in the audit log)" value={note} onChange={e => setNote(e.target.value)} maxLength={500} /><Button variant={danger ? 'danger' : 'primary'} className="mt-4 w-full" loading={busy} disabled={note.trim().length < 5} onClick={async () => { setBusy(true); try { await onSubmit(note.trim()); setNote(''); onClose() } finally { setBusy(false) } }}>{action}</Button></Sheet>
 }
 
-// ---------- overview ----------
-interface RecentActivity { id: string; action: string; target: string; createdAt: number | null }
-export function AdminOverview() {
-  const [s, setS] = useState<any>(null); const [err, setErr] = useState('')
-  const [activityAction, setActivityAction] = useState('')
-  const { can } = useAuth(); const canJobs = can('jobs.manage')
-  // Live: new repair requests appear here the moment a customer, the WordPress form or a Facebook/Instagram lead creates one.
-  const incoming = useQuery<{ reference: string; status: JobStatus; device: { manufacturer: string; model: string; type: string }; location: { area: string }; urgency: string; source?: string; quoteCount: number; createdAt?: { toDate(): Date } }>(canJobs ? 'repairRequests' : null, () => [orderBy('createdAt', 'desc'), limit(12)], [canJobs])
-  useEffect(() => { api.adminStats({}).then(setS).catch(e => setErr(errMsg(e))) }, [])
-  if (err) return <EmptyState icon={ShieldCheck} title="Can’t load stats" body={err} />
-  const recentActivity: RecentActivity[] = s?.recentActivity ?? []
-  const activityActions = [...new Set(recentActivity.map(a => a.action))].sort()
-  const filteredActivity = recentActivity.filter(a => !activityAction || a.action === activityAction)
-  const t = s?.totals; const days = s ? Object.entries<number>(s.requestsPerDay).sort() : []; const max = Math.max(1, ...days.map(d => d[1]))
-  const tiles: [string, number | undefined, typeof Users, string][] = [['Customers', t?.customers, Users, '/admin/customers'], ['Engineers', t?.engineers, HardHat, '/admin/engineers'], ['Pending approvals', t?.pendingApprovals, ShieldCheck, '/admin/approvals'], ['Open requests', t?.openJobs, ClipboardList, '/admin/jobs'], ['Active quotations', t?.activeQuotes, Receipt, '/admin/quotations'], ['Confirmed bookings', t?.confirmed, CalendarCheck, '/admin/appointments'], ['Completed jobs', t?.completed, CheckCircle2, '/admin/jobs'], ['Open reports', t?.reports, Flag, '/admin/reports']]
-  return (
-    <div><PageHeader title="Overview" sub="How the marketplace is doing right now." />
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{tiles.map(([l, v, I, to]) => <Link key={l} to={to} className="surface stat-card p-5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" />{s ? <p className="font-display text-3xl">{v}</p> : <Skeleton className="h-9 w-14" />}<p className="text-sm text-thor-text">{l}</p></Link>)}</div>
-      {canJobs && <Section title="New repair requests" action={<Link to="/admin/jobs" className="text-sm text-thor-blue">All requests</Link>}>
-        {incoming.loading ? <ListSkeleton rows={2} /> : incoming.data.length === 0 ? <p className="surface p-5 text-sm text-thor-text">No repair requests yet. New ones appear here instantly.</p> :
-          <ul className="divide-y divide-ink/8 surface px-5" aria-live="polite">{incoming.data.map(j => { const t = j.createdAt?.toDate(); const mins = t ? Math.max(0, Math.round((Date.now() - t.getTime()) / 60000)) : null
-            return <li key={j.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><div className="min-w-0"><p className="font-medium">{j.reference} · {j.device.manufacturer} {j.device.model}</p>
-              <p className="text-xs text-thor-text">{j.location?.area} · {mins === null ? 'just now' : mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)} h ago` : t!.toLocaleDateString('en-GB')} · {j.quoteCount ?? 0} quote(s)</p></div>
-              <div className="flex flex-wrap items-center gap-2">{j.urgency === 'urgent' && <Badge tone="bad">Urgent</Badge>}{j.source && j.source !== 'app' && <Badge tone="brand">{j.source === 'meta' ? 'Facebook/Instagram' : 'Website'}</Badge>}<StatusPill status={j.status} /></div></li> })}</ul>}</Section>}
-      {s?.marketing && <Section title="Advertising"><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{([['Facebook leads', s.marketing.facebookLeads], ['Instagram leads', s.marketing.instagramLeads], ['Leads awaiting verification', s.marketing.leadsAwaitingVerification], ['Advertising spend', gbp(s.marketing.advertisingSpendPence)], ['Cost per lead', s.marketing.costPerLeadPence ? gbp(s.marketing.costPerLeadPence) : '—'], ['Advertising-generated jobs', s.marketing.advertisingJobs]] as [string, string | number][]).map(([l, v]) => <Link key={l} to="/admin/leads" className="surface p-4"><p className="text-xs text-thor-text">{l}</p><p className="font-display text-2xl">{v}</p></Link>)}</div></Section>}
-      {s?.finance && <Section title="Money"><div className="grid grid-cols-2 gap-3 md:grid-cols-3">{([['Transaction value', gbp(s.finance.transactionValuePence)], ['Thor commission', gbp(s.finance.commissionPence)], ['Engineer payouts', gbp(s.finance.engineerPayoutPence)], ['Outstanding payments', s.finance.outstandingPayments], ['Disputed transactions', s.finance.disputedTransactions], ['Advertising-generated revenue', gbp(s.finance.advertisingRevenuePence)]] as [string, string | number][]).map(([l, v]) => <Link key={l} to="/admin/finance" className="surface p-4"><p className="text-xs text-thor-text">{l}</p><p className="font-display text-2xl">{v}</p></Link>)}</div></Section>}
-      {t && <p className="mt-4 text-sm text-thor-text">Also: {t.activeEngineers} active engineers · {t.awaitingBids} jobs awaiting quotations · {t.scheduled} scheduled appointments · {t.cancelled} cancelled repairs.</p>}
-      <Section title="New requests, last 14 days"><div className="surface p-5">{!s ? <Skeleton className="h-40" /> : days.length === 0 ? <p className="py-8 text-center text-thor-text">No requests in this period.</p> :
-        <><svg viewBox={`0 0 ${days.length * 28} 120`} className="h-40 w-full" role="img" aria-label="Bar chart of new repair requests per day">{days.map(([d, n], i) => <g key={d}><rect x={i * 28 + 4} y={100 - (n / max) * 90} width="20" height={(n / max) * 90} rx="4" fill="#225AA5" /><text x={i * 28 + 14} y={96 - (n / max) * 90} textAnchor="middle" fontSize="9" fill="#12233D">{n}</text><text x={i * 28 + 14} y="114" textAnchor="middle" fontSize="8" fill="#7A7A7A">{d.slice(8)}</text></g>)}</svg>
-          <table className="sr-only"><caption>Requests per day</caption><tbody>{days.map(([d, n]) => <tr key={d}><th>{d}</th><td>{n}</td></tr>)}</tbody></table></>}</div></Section>
-      <Section title="Recent activity">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-          <div className="w-full sm:w-56"><Select label="Filter by action" value={activityAction} onChange={e => setActivityAction(e.target.value)} disabled={!s || recentActivity.length === 0}>
-            <option value="">All actions</option>{activityActions.map(action => <option key={action} value={action}>{action}</option>)}
-          </Select></div>
-          {s && <p className="text-xs text-thor-text" role="status">Showing {filteredActivity.length} of {recentActivity.length} latest entries</p>}
-        </div>
-        {!s ? <ListSkeleton rows={2} /> : <ul className="divide-y divide-ink/8 surface px-5">
-          {filteredActivity.length === 0 && <li className="py-4 text-sm text-thor-text">{recentActivity.length === 0 ? 'Nothing yet.' : 'No recent activity matches this filter.'}</li>}
-          {filteredActivity.map(a => <li key={a.id} className="flex flex-wrap justify-between gap-3 py-3 text-sm"><span className="min-w-0 break-words"><b>{a.action}</b> <span className="text-thor-text">{a.target}</span></span><span className="text-xs text-thor-text">{a.createdAt === null ? 'Date unavailable' : new Date(a.createdAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}</span></li>)}
-        </ul>}
-      </Section></div>)
-}
+export { default as AdminOverview } from './AdminOverview'
 
 // ---------- approvals ----------
 interface App { status: string; profile?: any; submittedAt?: { toDate(): Date }; infoRequest?: string }
