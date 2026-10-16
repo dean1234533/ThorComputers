@@ -3,6 +3,7 @@
 
 /** Multi-word expressions collapsed to one canonical word BEFORE tokenising ("how much" -> price). Longest first. */
 const PHRASES: [RegExp, string][] = [
+  [/\bhow much notice\b/g, ' notice '], [/\b(how (do|can|should|would|could) (i|we)|how to|where (do|can|should) (i|we)|how am i (meant|supposed|able) to) pay(ing)?\b/g, ' howtopay '],
   [/\bhow much\b/g, ' price '], [/\bhow long\b/g, ' duration '], [/\bmoney back\b/g, ' refund '], [/\bget in touch\b/g, ' contact '], [/\bspeak to (a |an )?(human|person|someone|agent)\b/g, ' contact '],
   [/\btalk to (a |an )?(human|person|someone|agent)\b/g, ' contact '], [/\bcall off\b/g, ' cancel '], [/\bcalled off\b/g, ' cancel '], [/\bturn(s|ed|ing)? off\b/g, ' shutdown '], [/\bswitch(es|ed|ing)? off\b/g, ' shutdown '],
   [/\bshut(s|ting)? down\b/g, ' shutdown '], [/\bwon'?t (turn|switch|power) on\b/g, ' deadpc '], [/\bnot (turning|switching|powering) on\b/g, ' deadpc '], [/\bwill not (turn|switch|power) on\b/g, ' deadpc '],
@@ -15,14 +16,14 @@ const PHRASES: [RegExp, string][] = [
 ]
 /** word -> canonical word. Synonyms and the common ways people mis-type them. */
 const CANON: Record<string, string> = {
-  price: 'price', prices: 'price', pricing: 'price', cost: 'price', costs: 'price', charge: 'price', charges: 'price', fee: 'price', fees: 'price', rate: 'price', rates: 'price', expensive: 'price', cheap: 'price', afford: 'price',
+  price: 'price', prices: 'price', pricing: 'price', cost: 'price', costs: 'price', costing: 'price', charge: 'price', charges: 'price', fee: 'price', fees: 'price', rate: 'price', rates: 'price', expensive: 'price', cheap: 'price', afford: 'price',
   quote: 'quote', quotes: 'quote', quotation: 'quote', quotations: 'quote', quoted: 'quote', estimate: 'quote', estimates: 'quote', bid: 'quote', bids: 'quote',
   fix: 'repair', fixed: 'repair', fixing: 'repair', repair: 'repair', repairs: 'repair', repairing: 'repair', repaired: 'repair', mend: 'repair', sort: 'repair', service: 'repair', servicing: 'repair', job: 'repair', jobs: 'repair', request: 'repair', requests: 'repair',
   booking: 'book', bookings: 'book', book: 'book', booked: 'book', appointment: 'appointment', appointments: 'appointment', slot: 'appointment', slots: 'appointment', visit: 'appointment', schedule: 'appointment', scheduled: 'appointment',
   rebook: 'reschedule', reschedule: 'reschedule', rescheduling: 'reschedule', postpone: 'reschedule', move: 'reschedule', rearrange: 'reschedule', change: 'change', changes: 'change', changing: 'change', amend: 'change', edit: 'change',
   cancel: 'cancel', cancels: 'cancel', cancelled: 'cancel', canceled: 'cancel', cancelling: 'cancel', canceling: 'cancel', cancellation: 'cancel', abort: 'cancel', withdraw: 'cancel', stop: 'cancel',
   refund: 'refund', refunds: 'refund', refunded: 'refund', refunding: 'refund', reimburse: 'refund', reimbursed: 'refund', reimbursement: 'refund', repay: 'refund', compensation: 'refund',
-  pay: 'payment', paid: 'payment', paying: 'payment', payment: 'payment', payments: 'payment', checkout: 'payment', stripe: 'payment', card: 'card', invoice: 'receipt', invoices: 'receipt', receipt: 'receipt', receipts: 'receipt',
+  pay: 'payment', paid: 'paid', paying: 'payment', payment: 'payment', payments: 'payment', checkout: 'payment', stripe: 'payment', card: 'card', invoice: 'receipt', invoices: 'receipt', receipt: 'receipt', receipts: 'receipt',
   warranty: 'warranty', warranties: 'warranty', guarantee: 'warranty', guaranteed: 'warranty', guarantees: 'warranty', aftercare: 'warranty',
   engineer: 'engineer', engineers: 'engineer', technician: 'engineer', technicians: 'engineer', repairer: 'engineer', tech: 'engineer', expert: 'engineer', professional: 'engineer',
   verified: 'verify', verify: 'verify', verification: 'verify', vetted: 'verify', checked: 'verify', qualified: 'verify', qualification: 'verify', qualifications: 'verify', certificate: 'verify', certificates: 'verify', certified: 'verify', trust: 'verify', trusted: 'verify', safe: 'safe',
@@ -31,23 +32,23 @@ const CANON: Record<string, string> = {
   gaming: 'gaming', tablet: 'tablet', tablets: 'tablet', ipad: 'tablet', ipads: 'tablet', mobile: 'phone', mobiles: 'phone', iphone: 'phone', iphones: 'phone', smartphone: 'phone', android: 'phone', printer: 'printer', printers: 'printer',
   home: 'homevisit', house: 'homevisit', flat: 'homevisit', number: 'number', see: 'see', sees: 'see', seen: 'see', view: 'see', share: 'see', shared: 'see', remote: 'remote', remotely: 'remote', online: 'remote', workshop: 'workshop', collection: 'collection', homevisit: 'homevisit', onsite: 'homevisit', office: 'office', business: 'office', premises: 'office',
   area: 'coverage', areas: 'coverage', cover: 'coverage', covered: 'coverage', coverage: 'coverage', location: 'coverage', locations: 'coverage', london: 'coverage', kent: 'coverage', postcode: 'postcode', near: 'coverage', nearby: 'coverage', local: 'coverage',
-  account: 'account', profile: 'account', delete: 'delete', erase: 'delete', remove: 'delete', export: 'export', download: 'export', data: 'data', privacy: 'privacy', gdpr: 'privacy', personal: 'privacy', password: 'password', reset: 'reset', forgot: 'reset', forgotten: 'reset',
+  notice: 'notice', howtopay: 'howtopay', information: 'data', info: 'data', details: 'data', detail: 'data', account: 'account', profile: 'account', delete: 'delete', erase: 'delete', remove: 'delete', export: 'export', download: 'export', data: 'data', privacy: 'privacy', gdpr: 'privacy', personal: 'privacy', password: 'password', reset: 'reset', forgot: 'reset', forgotten: 'reset',
   install: 'install', app: 'install', pwa: 'install', homescreen: 'install', notification: 'notify', notifications: 'notify', notify: 'notify', alerts: 'notify', alert: 'notify', sound: 'notify', push: 'notify',
   message: 'message', messages: 'message', chat: 'message', messaging: 'message', review: 'review', reviews: 'review', rating: 'review', ratings: 'review', feedback: 'review', stars: 'review',
   extra: 'extra', additional: 'extra', unexpected: 'extra', extras: 'extra', dispute: 'dispute', problem: 'problem', problems: 'problem', issue: 'problem', issues: 'problem', wrong: 'problem', unhappy: 'problem', unsatisfied: 'problem', bad: 'problem', poor: 'problem',
   duration: 'duration', quick: 'duration', quickly: 'duration', fast: 'duration', soon: 'duration', long: 'duration', takes: 'duration', urgent: 'urgent', urgently: 'urgent', asap: 'urgent', emergency: 'urgent', waiting: 'duration', wait: 'duration',
   process: 'process', works: 'process', start: 'start', begin: 'start', started: 'start', new: 'new', create: 'start', submit: 'start', raise: 'start', post: 'start',
   join: 'signup', signup: 'signup', register: 'signup', apply: 'signup', signin: 'signin', login: 'signin', logon: 'signin', deadpc: 'deadpc', shutdown: 'shutdown', slow: 'slow', virus: 'virus', malware: 'virus', cracked: 'cracked', broken: 'broken', smashed: 'cracked',
-  cheaper: 'price', discount: 'price', free: 'price', deposit: 'price', commission: 'price', vat: 'price', tax: 'price',
+  cheaper: 'price', high: 'price', low: 'price', pricey: 'price', overpriced: 'price', affordable: 'price', discount: 'price', free: 'price', deposit: 'price', commission: 'price', vat: 'price', tax: 'price',
   not: 'neg', no: 'neg', cannot: 'neg', cant: 'neg', dont: 'neg', wont: 'neg', isnt: 'neg', arent: 'neg', wasnt: 'neg', didnt: 'neg', doesnt: 'neg', couldnt: 'neg', shouldnt: 'neg', wouldnt: 'neg', never: 'neg', unable: 'neg',
   hello: 'hello', hi: 'hello', hey: 'hello', hiya: 'hello', morning: 'hello', afternoon: 'hello', evening: 'hello', thanks: 'thanks', thank: 'thanks', cheers: 'thanks', ta: 'thanks', bye: 'bye', goodbye: 'bye', cya: 'bye',
 }
 /** Typos seen in real support chats that edit-distance alone would miss. */
-const TYPOS: Record<string, string> = { laptpo: 'laptop', labtop: 'laptop', lapto: 'laptop', lap: 'laptop', refnd: 'refund', refudn: 'refund', apointment: 'appointment', appoitment: 'appointment', appointmnet: 'appointment', apoitment: 'appointment', quoet: 'quote', qoute: 'quote', qoutes: 'quote', enginer: 'engineer', enginear: 'engineer', engeneer: 'engineer', paiment: 'payment', payement: 'payment', paymnet: 'payment', cancle: 'cancel', cancell: 'cancel', canel: 'cancel', warrenty: 'warranty', garantee: 'guarantee', gurantee: 'guarantee', reschedual: 'reschedule', resheduling: 'reschedule', recieve: 'receive', refering: 'referring', wensday: 'wednesday', tomorow: 'tomorrow', brocken: 'broken', brokn: 'broken', scren: 'screen', screan: 'screen', batery: 'battery', batary: 'battery', compter: 'computer', computor: 'computer', pc: 'pc', printr: 'printer', phne: 'phone', ipone: 'iphone', tablit: 'tablet' }
+const TYPOS: Record<string, string> = { repares: 'repair', repare: 'repair', repaires: 'repair', repiar: 'repair', repiars: 'repair', reapir: 'repair', reapirs: 'repair', repairr: 'repair', cancelation: 'cancel', cancelations: 'cancel', paymnt: 'payment', priceing: 'price', infomation: 'information', informaton: 'information', laptpo: 'laptop', labtop: 'laptop', lapto: 'laptop', lap: 'laptop', refnd: 'refund', refudn: 'refund', apointment: 'appointment', appoitment: 'appointment', appointmnet: 'appointment', apoitment: 'appointment', quoet: 'quote', qoute: 'quote', qoutes: 'quote', enginer: 'engineer', enginear: 'engineer', engeneer: 'engineer', paiment: 'payment', payement: 'payment', paymnet: 'payment', cancle: 'cancel', cancell: 'cancel', canel: 'cancel', warrenty: 'warranty', garantee: 'guarantee', gurantee: 'guarantee', reschedual: 'reschedule', resheduling: 'reschedule', recieve: 'receive', refering: 'referring', wensday: 'wednesday', tomorow: 'tomorrow', brocken: 'broken', brokn: 'broken', scren: 'screen', screan: 'screen', batery: 'battery', batary: 'battery', compter: 'computer', computor: 'computer', pc: 'pc', printr: 'printer', phne: 'phone', ipone: 'iphone', tablit: 'tablet' }
 /** Repair vocabulary that is on-topic even though no FAQ phrase spells it out. */
 const DOMAIN = new Set('screen battery keyboard virus windows wifi charger fan drive ssd ram memory cable port speaker camera microphone display monitor mouse trackpad touchpad software hardware upgrade data files photos backup router network internet email password update'.split(' '))
 const KNOWN_CANON = new Set(Object.values(CANON))
-export const STOP = new Set('a an the i me my mine we us our you your it its is are was were am be been being do does did doing done have has had having can could would should will shall may might must to of in on at for from with by about as into onto over under up down out off this that these those there here and or but if so then than too very just also yes please pls plz ok okay want need like get got let lets hows whats im ive id youre theres thor app website site how what why which who whom whose tell know wondering whether guys any some wheres thats whos heres much lot many really um uh er erm well actually basically honestly anyway maybe perhaps possibly kindly sorry excuse question questions make'.split(' '))
+export const STOP = new Set('a an the i me my mine we us our you your it its is are was were am be been being do does did doing done have has had having can could would should will shall may might must to of in on at for from with by about as into onto over under up down out off this that these those there here and or but if so then than too very just also yes please pls plz ok okay want need like get got let lets hows whats im ive id youre theres thor app website site how what why which who whom whose tell know wondering whether guys any some wheres thats whos heres much lot many really um uh er erm well actually basically honestly anyway maybe perhaps possibly kindly sorry excuse question questions make give giving required'.split(' '))
 
 const CONTRACTIONS: [RegExp, string][] = [[/won't/g, 'will not'], [/can't/g, 'cannot'], [/n't/g, ' not'], [/'re/g, ' are'], [/'ve/g, ' have'], [/'ll/g, ' will'], [/'m/g, ' am'], [/'s/g, ' is'], [/'d/g, ' would']]
 
@@ -76,14 +77,15 @@ const VOCAB = Object.keys(CANON).filter(w => w.length >= 5)
 export function correct(tok: string, extra: Iterable<string> = []): string {
   if (TYPOS[tok]) return TYPOS[tok]
   if (CANON[tok] !== undefined || tok.length < 5 || /\d/.test(tok)) return tok
-  const limit = tok.length >= 9 ? 2 : 1
-  let best = tok, bestD = limit + 1, tie = false
+  let best = tok, bestD = 3, tie = false
   for (const w of [...VOCAB, ...extra]) {
-    if (w[0] !== tok[0] || Math.abs(w.length - tok.length) > limit) continue
-    const dist = editDistance(tok, w, limit)
+    if (w[0] !== tok[0]) continue
+    const lim = tok.length >= 9 || (tok.length >= 7 && w.slice(0, 3) === tok.slice(0, 3)) ? 2 : 1       // 7-8 letter words: two edits only when the first three letters agree
+    if (Math.abs(w.length - tok.length) > lim) continue
+    const dist = editDistance(tok, w, lim); if (dist > lim) continue
     if (dist < bestD) { best = w; bestD = dist; tie = false } else if (dist === bestD && w !== best) tie = true
   }
-  return bestD <= limit && !tie ? best : tok
+  return bestD <= 2 && !tie ? best : tok
 }
 
 /** Canonical content words of a message (stop words removed, synonyms merged, typos fixed). */

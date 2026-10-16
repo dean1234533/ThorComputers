@@ -19,8 +19,8 @@ export default function BookingPanel({ jobId, needsAddress, onBooked }: { jobId:
     <div className="space-y-3"><p className="flex items-center gap-2 text-sm text-thor-text"><Home className="size-4 text-thor-blue" />The engineer will visit you, so we need your address. It’s only shared with them once booked.</p>
       <Input label="Full address" value={address} onChange={e => setAddress(e.target.value)} autoComplete="street-address" /><Button onClick={saveAddress} loading={busy === 'addr'} disabled={address.trim().length < 5}>Save address</Button></div>)
   return (
-    <div>
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2" role="listbox" aria-label="Choose a day">{days.map(d => <button key={d} role="option" aria-selected={d === day} onClick={() => setDay(d)} className={cx('shrink-0 rounded-xl px-3.5 py-2 text-sm transition', d === day ? 'bg-thor-blue text-white' : 'bg-white ring-1 ring-ink/10 hover:ring-thor-blue/50')}>{fmtDay(d)}</button>)}</div>
+    <div className="min-w-0">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:thin]" role="listbox" aria-label="Choose a day">{days.map(d => <button key={d} role="option" aria-selected={d === day} onClick={() => setDay(d)} className={cx('shrink-0 rounded-xl px-3.5 py-2 text-sm transition', d === day ? 'bg-thor-blue text-white' : 'bg-white ring-1 ring-ink/10 hover:ring-thor-blue/50')}>{fmtDay(d)}</button>)}</div>
       <p className="mb-2 mt-4 text-xs text-thor-text">Expected duration: {dur >= 60 ? `${Math.floor(dur / 60)}h${dur % 60 ? ` ${dur % 60}m` : ''}` : `${dur}m`} · times shown in UK time</p>
       {slots === null ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-11" />)}</div> :
         slots.length === 0 ? <p className="rounded-xl bg-paper p-4 text-sm text-thor-text">No free times on this day. Try another date.</p> :

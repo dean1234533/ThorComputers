@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { doc, limit, orderBy, setDoc, where } from 'firebase/firestore'
-import { Star, Briefcase, FileText, Search, Plus, X } from 'lucide-react'
+import { Star, Briefcase, FileText, Search, Plus, X, ArrowUpRight, CalendarDays, Wrench } from 'lucide-react'
 import { db } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
@@ -15,11 +15,16 @@ export function EngineerDashboard() {
   const live = useQuery<{ totalPence: number }>(approved ? 'repairQuotes' : null, () => [where('engineerId', '==', user!.uid), where('status', '==', 'submitted'), limit(50)], [user!.uid, approved])
   const jobs = useQuery<{ status: string }>(approved ? 'repairRequests' : null, () => [where('selectedEngineerId', '==', user!.uid), limit(50)], [user!.uid, approved])
   const active = jobs.data.filter(j => !['closed', 'cancelled', 'completed'].includes(j.status)).length
-  const Tile = ({ icon: I, label, value, to }: { icon: typeof Star; label: string; value: React.ReactNode; to: string }) => <Link to={to} className="surface p-5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" /><p className="font-display text-3xl">{value}</p><p className="text-sm text-thor-text">{label}</p></Link>
+  const Tile = ({ icon: I, label, value, to }: { icon: typeof Star; label: string; value: React.ReactNode; to: string }) => <Link to={to} className="surface stat-card p-5 transition hover:shadow-md"><I className="mb-2 size-5 text-thor-blue" /><p className="font-display text-3xl">{value}</p><p className="text-sm text-thor-text">{label}</p></Link>
   return (
     <div><PageHeader title={`Hello, ${profile?.fullName.split(' ')[0] ?? ''}`} sub="Your engineer dashboard." />
       {!approved ? <div className="rounded-3xl bg-thor-blue p-6 text-white"><h2 className="font-display text-xl">{app.data?.status === 'pending' ? 'Your application is being reviewed' : 'Finish your application'}</h2><p className="mt-1.5 text-white/80">{app.data?.status === 'pending' ? 'We’ll notify you as soon as there’s a decision.' : 'Complete your profile and upload qualifications to start receiving jobs.'}</p><Link to="/engineer/profile"><Button variant="cta" className="mt-4">{app.data?.status === 'pending' ? 'View application' : 'Continue'}</Button></Link></div> :
-        <><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Tile icon={Search} label="Browse jobs" value="Open" to="/engineer/jobs" /><Tile icon={FileText} label="Live quotations" value={live.data.length} to="/engineer/quotations" /><Tile icon={Briefcase} label="Active jobs" value={active} to="/engineer/my-jobs" /><Tile icon={Star} label="Rating" value={prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : 'Not rated'} to="/engineer/reviews" /></div>
+        <><section className="repair-hero engineer-welcome mb-7 rounded-3xl p-6 text-white sm:p-8">
+            <Wrench className="engineer-welcome-art" strokeWidth={.65} aria-hidden="true" />
+            <div className="relative max-w-lg"><p className="mb-3 text-[10px] font-medium uppercase tracking-[.15em] text-thor-sky">Your expertise. Their peace of mind.</p><h2 className="max-w-sm font-display text-[28px] font-semibold leading-tight sm:text-[34px]">Good work starts with<br /><span className="hero-highlight">a great match.</span></h2><p className="mt-3 max-w-sm text-sm leading-6 text-white/75">Find repairs that fit your skills and keep every quote, conversation and booking in one place.</p>
+              <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-4"><Link to="/engineer/jobs" className="hero-cta inline-flex h-12 items-center gap-3 rounded-xl bg-thor-orange px-5 text-sm font-semibold text-ink">Find your next job <ArrowUpRight className="size-4" /></Link><Link to="/engineer/appointments" className="hero-secondary flex items-center gap-2 text-xs font-medium text-white/80"><CalendarDays className="size-4" />Your availability</Link></div>
+            </div>
+          </section><div className="grid grid-cols-2 gap-3 md:grid-cols-4"><Tile icon={Search} label="Browse jobs" value="Open" to="/engineer/jobs" /><Tile icon={FileText} label="Live quotations" value={live.data.length} to="/engineer/quotations" /><Tile icon={Briefcase} label="Active jobs" value={active} to="/engineer/my-jobs" /><Tile icon={Star} label="Rating" value={prof.data?.reviewCount ? prof.data.ratingAvg.toFixed(1) : 'Not rated'} to="/engineer/reviews" /></div>
           <p className="mt-6 text-sm text-thor-text">Completed jobs: <b className="text-ink">{prof.data?.completedJobs ?? 0}</b></p></>}</div>)
 }
 

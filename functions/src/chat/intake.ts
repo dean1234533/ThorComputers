@@ -3,6 +3,7 @@
 import { DEVICES, METHODS, METHODS_FOR, DEVICE_LABEL, METHOD_LABEL, Device, Method } from '../catalog'
 import { correctedText, normalise } from './nlu'
 import type { QuickReply } from './faq'
+import { stripPrivate } from '../privacy'
 
 export interface Slots { device?: Device; manufacturer?: string; model?: string; problem?: string; method?: Method; postcode?: string; urgency?: 'flexible' | 'soon' | 'urgent' }
 export type Ask = 'device' | 'manufacturer' | 'problem' | 'method' | 'postcode' | 'urgency'
@@ -40,6 +41,39 @@ export function detectMake(text: string): { manufacturer?: string; model?: strin
 }
 
 const SYMPTOMS = /\b(won'?t|will not|doesn'?t|does not|not|cannot|can'?t|no) (turn|switch|power|boot|start|charge|work|connect|load|print|display|show|respond|detect|read)|\b(deadpc|shutdown|dead|broken|cracked|smashed|shattered|flicker|black screen|blank screen|blue screen|overheat|overheating|too hot|noisy|loud fan|beeping|clicking|slow|sluggish|freez|frozen|crash|lag|restart|reboot|shut ?down|shuts? off|switch(es|ing)? off|turns? off|virus|malware|pop ?ups?|hacked|spyware|ransomware|battery|charger|charging|keyboard|trackpad|touchpad|usb port|wifi|wi-?fi|internet|bluetooth|water|spilled|spill|liquid|dropped|drop|data|files?|hard drive|ssd|paper jam|jam|ink|toner|scan|error|problem|issue|fault|stopped|stuck|update|windows|noise|smell|burning|lines|pixel)\b/i
+// Phrases that fill OTHER slots (service method, urgency, device/brand). A clause made only of these is not part of the problem description.
+const METHOD_PHRASES = /\b(remote assistance|remote(ly)?|home visit|come (out )?to (me|my (house|home|place))|at my (home|house|place)|on-?site|business premises( visit)?|collection and return|collect(ion)?|pick(ed)? ?up|workshop( repair)?|drop (it )?off|bring (it )?in)\b/gi
+const URGENCY_PHRASES = /\b(not urgent|flexible|no rush|no hurry|whenever|asap|as soon as possible|urgent(ly)?|emergency|immediately|soon)\b/gi
+const DANGLING = /\b(?:i am|i'm|im|i live|located|call me|text me|email me|contact me|reach me|ring me|my (?:number|email|postcode|address|phone) is)(?:\s+(?:at|on|in|is|me|to))*\s*$/i
+const GREETING = /^(?:hi|hello|hey)\b[ ,!]*/i
+const LEAD_IN = /^(?:(?:hi|hello|hey)[ ,!]*)?(?:i|we)(?: \w+)?\s+(?:need|want|would like|require|have)\s+(?:a|an|my|the|some)?\s*(?:[\w-]+\s+){0,4}?(?:repaired|fixed|fixing|repairing|repair|looked at|sorted|diagnosed)\s*(?:because|as|since|[,:-])?\s*/i
+
+/** The public problem description from a longer message: no postcode/phone/email/address, no leftover service-method or urgency clauses, no "I need a Dell laptop repaired because" lead-in.
+ *  Returns the text unchanged when there is nothing to remove, so ordinary one-line problems are kept exactly as typed. */
+export function cleanProblem(text: string): string {
+  const original = text.trim().slice(0, 500), kept: string[] = []
+  for (const sentence of original.split(/(?<=[.!?;])\s+|\n+/)) {
+    const parts: string[] = []
+    for (const raw of sentence.replace(/[.!?;]+$/, '').split(/\s*,\s*/)) {
+      const sp = stripPrivate(raw)                                                              // never keep a postcode, phone, email or street address
+      const clause = (sp.removed ? sp.text.replace(DANGLING, '') : sp.text).replace(GREETING, '').trim()   // what is left of "I am at 12 High Street" / "call me on 0770…" once the detail is gone
+      const rest = clause.replace(METHOD_PHRASES, ' ').replace(URGENCY_PHRASES, ' ').replace(LEAD_IN, '').replace(/\s+/g, ' ').trim()
+      if (tokensOf(rest).length === 0) continue                                               // only slot answers ("Remote assistance", "E15 1AA", "flexible", "Dell laptop"): not part of the fault
+      parts.push(LEAD_IN.test(clause) ? clause.replace(LEAD_IN, '').trim() : clause)         // drop "I need a Dell laptop repaired because"
+    }
+    if (parts.length) kept.push(parts.join(', '))
+  }
+  const out = kept.join('. ').replace(/\s{2,}/g, ' ').trim()
+  if (!out) return ''
+  const trim = (x: string) => x.replace(/[.!?;,\s]+$/, '')
+  return trim(out) === trim(original) ? original : out.charAt(0).toUpperCase() + out.slice(1)   // untouched one-liners stay exactly as typed
+}
+/** Words that actually describe something: not a device or brand name, and not filler. */
+function tokensOf(s: string): string[] {
+  const stop = new Set(['hi', 'hello', 'hey', 'a', 'an', 'the', 'my', 'is', 'it', 'its', 'i', 'we', 'me', 'please', 'thanks', 'thank', 'you', 'and', 'or', 'for', 'to', 'of', 'in', 'at', 'on', 'with', 'qa'])
+  return s.toLowerCase().split(/[^a-z0-9']+/).filter(w => w.length > 1 && !stop.has(w) && !/^(laptop|desktop|computer|pc|phone|tablet|printer|mac|macbook|iphone|ipad|gaming)$/.test(w) && !Object.keys(BRANDS).includes(w) && !/^(testing|test)$/.test(w) || /^(slow|broken|dead)$/.test(w))
+}
+
 export const hasSymptom = (t: string) => SYMPTOMS.test(correctedText(t))
 
 export const COMMON_SYMPTOMS: Record<string, string[]> = {
@@ -118,8 +152,8 @@ export function extract(text: string, asking: Ask | null, current: Slots): { pat
     if (isSkip(t)) { patch.manufacturer = 'Unknown' }
     else if (t.length <= 60 && t.split(/\s+/).length <= 4 && /^[A-Za-z0-9][A-Za-z0-9 .\-+/]*$/.test(t) && !detectDevice(t)) { const [first, ...rest] = t.split(/\s+/); patch.manufacturer = first.charAt(0).toUpperCase() + first.slice(1); if (rest.length) patch.model = rest.join(' ') }
   }
-  if (asking === 'problem' && !isSkip(t) && normalise(t).length >= 4 && !isQuestion(t) && !/^(something else|other)$/.test(normalise(t))) patch.problem = t
-  else if (hasSymptom(t) && !isQuestion(t) && (!asking || asking === 'problem' || t.split(/\s+/).length >= 4)) patch.problem = patch.problem ?? t
+  if (asking === 'problem' && !isSkip(t) && normalise(t).length >= 4 && !isQuestion(t) && !/^(something else|other)$/.test(normalise(t))) { const c = cleanProblem(t); if (c) patch.problem = c }
+  else if (hasSymptom(t) && !isQuestion(t) && (!asking || asking === 'problem' || t.split(/\s+/).length >= 4)) { const c = cleanProblem(t); if (c) patch.problem = patch.problem ?? c }
   if (asking === 'urgency' && !patch.urgency) { const n = normalise(t); if (isSkip(t) || /^(flexible|whenever|any)/.test(n)) patch.urgency = 'flexible' }
   // a quick-reply label for "something else" asks for words instead
   const understoodAsked = asking ? (asking === 'device' ? !!patch.device : asking === 'manufacturer' ? !!patch.manufacturer : asking === 'problem' ? !!patch.problem : asking === 'method' ? !!patch.method : asking === 'postcode' ? !!patch.postcode : !!patch.urgency) : Object.keys(patch).length > 0
@@ -132,5 +166,5 @@ export function summary(s: Slots): string {
   return [`Device: ${s.device ? DEVICE_LABEL[s.device] : '?'}${make ? ` (${make})` : ''}`, `Problem: ${s.problem ?? '?'}`, `Service: ${s.method ? METHOD_LABEL[s.method] : '?'}`, `Postcode: ${s.postcode ?? '?'}`, `Urgency: ${s.urgency === 'urgent' ? 'Urgent' : s.urgency === 'soon' ? 'Soon' : 'Flexible'}`].join('\n')
 }
 /** The existing repair form's own fields; the customer still reviews and submits it themselves. */
-export const toDraft = (s: Slots) => ({ device: s.device, manufacturer: s.manufacturer === 'Unknown' ? undefined : s.manufacturer, model: s.model, problem: s.problem, serviceMethods: s.method ? [s.method] : [], postcode: s.postcode, urgency: s.urgency ?? 'flexible' })
+export const toDraft = (s: Slots) => Object.fromEntries(Object.entries({ device: s.device, manufacturer: s.manufacturer === 'Unknown' ? undefined : s.manufacturer, model: s.model, problem: s.problem, serviceMethods: s.method ? [s.method] : [], postcode: s.postcode, urgency: s.urgency ?? 'flexible' }).filter(([, v]) => v !== undefined)) as { device?: Device; manufacturer?: string; model?: string; problem?: string; serviceMethods: Method[]; postcode?: string; urgency: 'flexible' | 'soon' | 'urgent' }
 export const isComplete = (s: Slots) => !!(s.device && s.manufacturer && s.problem && s.method && s.postcode)

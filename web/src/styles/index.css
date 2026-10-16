@@ -10,9 +10,9 @@
   --color-thor-orange: #FF8F34;    /* e-global-color-accent: call-to-action */
   --color-thor-orange-600: #E57412;
   --color-thor-slate: #54595F;     /* e-global-color-secondary */
-  --color-thor-text: #7A7A7A;      /* e-global-color-text */
+  --color-thor-text: #637287;      /* Accessible supporting text on light surfaces. */
   --color-ink: #12233D;
-  --color-paper: #F6F8FB;
+  --color-paper: #F3F6FA;
   --color-ok: #1F9D6B;
   --color-warn: #C98A00;
   --color-bad: #CF2E2E;
@@ -71,45 +71,124 @@ button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled), select { cursor: pointer; }
 h1, h2, h3 { letter-spacing: -.045em; }
 ::selection { background: #cce6f5; color: #12233d; }
-.app-sidebar { background: #0f2a4d; border-right: 1px solid #ffffff08; }
-.sidebar-link { min-height: 44px; font-size: 13px; }
-.sidebar-link.active { background: #ff8f34; color: #12233d; box-shadow: 0 3px 12px #00000012; }
-.sidebar-link.active::after { content: ""; margin-left: auto; width: 5px; height: 5px; background: currentColor; border-radius: 50%; }
-.workspace-bar { background: #f6f8fbed; backdrop-filter: blur(18px); border-bottom: 1px solid #12233d0a; }
+.app-workspace { background: radial-gradient(ellipse at 100% 0%, #e4eef8 0, transparent 55%), var(--color-paper); }
+.app-sidebar { background: radial-gradient(ellipse at 0% 100%, #17436470, transparent 55%), #0c223c; border-right: 1px solid #ffffff08; box-shadow: 6px 0 28px #0f2a4d08; }
+.workspace-identity { box-shadow: inset 0 1px 0 #ffffff08; }
+.sidebar-link { min-height: 46px; font-size: 13px; border: 1px solid transparent; }
+.sidebar-link.active { background: #225aa54d; border-color: #6ec1e429; color: #fff; box-shadow: inset 3px 0 0 var(--color-thor-sky), 0 4px 14px #0000000a; }
+.sidebar-link.active svg { color: #8bd9f4; }
+.sidebar-link.active::after { content: ""; margin-left: auto; width: 5px; height: 5px; background: var(--color-thor-orange); border-radius: 50%; }
+.workspace-bar { background: #f8faffeb; backdrop-filter: blur(18px); border-bottom: 1px solid #12233d0c; }
+.workspace-content { position: relative; }
 .page-header { margin-bottom: 32px; }
-.surface { border: 1px solid #12233d0c; background: #fff; box-shadow: 0 3px 14px #12233d03; border-radius: 20px; }
-.repair-hero { position: relative; isolation: isolate; overflow: hidden; background: #1a4680; }
-.repair-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 90% 30%, #225aa5 0, transparent 65%); }
+.page-header h1 { font-weight: 700; line-height: 1.15; }
+.page-header p { max-width: 42rem; }
+.surface { border: 1px solid #17365612; background: #fff; box-shadow: 0 2px 3px #12233d02, 0 8px 24px #12233d04; border-radius: 20px; }
+a.surface { transition: border-color .2s, box-shadow .2s, transform .2s; }
+a.surface:hover { border-color: #225aa538; box-shadow: 0 8px 24px #12233d0a; }
+.repair-hero { position: relative; isolation: isolate; overflow: hidden; background: #102d50; border: 1px solid #183f66; box-shadow: 0 14px 32px #0f2a4d14, inset 0 1px 0 #ffffff12; }
+.repair-hero::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 90% 20%, #225aa575 0, transparent 65%); }
+.repair-hero-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: 12px; }
+.hero-highlight { color: #8edeea; }
+.hero-kicker { letter-spacing: .13em; }
+.hero-cta { box-shadow: 0 5px 16px #00000018, inset 0 1px 0 #ffffff40; }
+.hero-cta:hover { background: #ffa45c; transform: translateY(-2px); }
+.hero-cta:hover svg, .hero-secondary:hover svg { transform: translateX(2px); }
+.hero-cta svg, .hero-secondary svg { transition: transform .2s; }
+.hero-secondary:hover { color: #fff; }
+.hero-service-strip span { display: inline-flex; align-items: center; gap: 6px; }
+.hero-service-strip svg { color: #8edeea; }
+.engineer-welcome-art { position: absolute; width: 240px; height: 240px; right: 2%; top: 28px; transform: rotate(-18deg); color: #6ec1e426; }
 .hero-orbits { position: absolute; width: 310px; height: 310px; border: 1px solid #6ec1e41c; border-radius: 50%; right: -75px; top: -55px; pointer-events: none; }
 .hero-orbits::before, .hero-orbits::after { content: ""; position: absolute; border: 1px solid #6ec1e41c; border-radius: 50%; }
 .hero-orbits::before { inset: 35px; } .hero-orbits::after { inset: 70px; }
-.auth-story { background: #0f2a4d; isolation: isolate; }
+.auth-story { background: #0c223c; isolation: isolate; }
 .auth-story::before { content: ""; position: absolute; inset: 0; z-index: -1; background: radial-gradient(ellipse at 90% 50%, #225aa58a, transparent 65%); }
 .auth-story::after { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .14; background-image: radial-gradient(#6ec1e4 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(transparent, black); }
-.auth-visual { position: relative; margin: 34px 0 28px; }
+.auth-visual { position: relative; margin: 20px 0 28px; }
 .device-card { background: linear-gradient(135deg, #ffffff10, #ffffff04); border: 1px solid #ffffff1a; border-radius: 24px; box-shadow: 0 24px 60px #00000020; }
-.auth-content { background: #f8faff; }
-.auth-form-card { padding: 36px; background: #fff; border: 1px solid #12233d0b; border-radius: 24px; box-shadow: 0 12px 60px #12233d05; }
-.ui-button { letter-spacing: -.01em; font-size: 14px; box-shadow: 0 2px 3px #12233d08; }
+.auth-content { background: radial-gradient(ellipse at 100% 0, #e2edf8, transparent 65%), #f6f8fc; }
+.auth-form-card { position: relative; padding: 38px; background: #fff; border: 1px solid #12233d10; border-radius: 26px; box-shadow: 0 4px 6px #12233d02, 0 24px 64px -24px #12233d26; }
+.auth-form-card::before { content: ""; position: absolute; top: -1px; left: 36px; right: 36px; height: 3px; background: var(--color-thor-blue); border-radius: 0 0 3px 3px; }
+.ui-button { letter-spacing: -.01em; font-size: 14px; box-shadow: 0 2px 3px #12233d08; transition: background .2s, box-shadow .2s, transform .2s; }
+.ui-button--primary { box-shadow: 0 4px 8px #225aa51a, inset 0 1px 0 #ffffff1a; }
+.ui-button--cta { box-shadow: 0 4px 10px #e5741220, inset 0 1px 0 #ffffff45; }
+.ui-button--ghost { box-shadow: none; }
 .ui-button:hover { transform: translateY(-1px); }
 .ui-button:active { transform: translateY(0); }
-.ui-input { background: #fbfcff; border-color: #12233d1c; font-size: 16px; min-height: 48px; }
+.ui-input { background: #f9fbfe; border-color: #12233d24; font-size: 16px; min-height: 48px; box-shadow: inset 0 1px 2px #12233d03; }
+.ui-input:focus { background: #fff; }
 .ui-input:hover { border-color: #12233d36; }
-.empty-state { max-width: none; border: 1px dashed #12233d1c; border-radius: 18px; background: #f8faff; padding: 38px 20px; }
+.empty-state { max-width: none; border: 1px dashed #225aa52b; border-radius: 20px; background: #ffffffb3; padding: 38px 20px; }
+.empty-state > div:first-child { border-radius: 20px; background: #e9f2fb; box-shadow: 0 5px 14px #225aa50a; }
 .empty-state p { max-width: 320px; font-size: 13px; line-height: 1.7; }
-.stat-card { transition: border-color .2s, transform .2s; }
+.stat-card { position: relative; overflow: hidden; transition: border-color .2s, transform .2s; }
+.stat-card::before { content: ""; position: absolute; left: 20px; top: 0; width: 28px; height: 3px; border-radius: 0 0 4px 4px; background: var(--color-thor-blue); }
+.stat-card:nth-child(2)::before { background: var(--color-thor-orange); }
+.stat-card:nth-child(3)::before { background: #1b887b; }
+.stat-card > div:first-child > span { background: #edf3fb; border: 1px solid #225aa50a; }
+.stat-card:nth-child(2) > div:first-child > span { background: #fff2e6; }
+.stat-card:nth-child(2) > div:first-child svg { color: #a45517; }
+.stat-card:nth-child(3) > div:first-child > span { background: #e8f5f1; }
+.stat-card:nth-child(3) > div:first-child svg { color: #167465; }
+.stat-card p.font-display { font-variant-numeric: tabular-nums; letter-spacing: -.06em; }
 .stat-card:hover { border-color: #225aa533; transform: translateY(-2px); }
+.care-guide { background: #eef4fb; border-color: #225aa515; box-shadow: none; }
+.section-heading h2 { font-weight: 650; }
+.ui-badge { border: 1px solid currentColor; border-color: color-mix(in srgb, currentColor 12%, transparent); padding-block: 3px; font-size: 11px; white-space: nowrap; }
+.repair-row > span:first-child { background: #edf3fb; border: 1px solid #225aa50c; }
+
+/* Shared device illustration: geometric, lightweight and independent of customer data. */
+.device-care-visual { position: relative; width: 100%; max-width: 380px; min-width: 0; margin-inline: auto; padding: 20px 0 10px; }
+.device-care-laptop { position: relative; width: 100%; filter: drop-shadow(0 18px 14px #00000020); }
+.device-care-halo { position: absolute; width: 76%; aspect-ratio: 1; top: 0; left: 12%; border: 1px solid #6ec1e41c; border-radius: 50%; box-shadow: 0 0 0 24px #6ec1e405, 0 0 0 25px #6ec1e40b; }
+.device-care-tag { position: absolute; display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-radius: 12px; font-size: 10px; line-height: 1.5; box-shadow: 0 8px 24px #00000020; }
+.device-care-tag--top { top: 7px; right: -4px; color: #d5e9f7; background: #1b436b; border: 1px solid #6ec1e43b; }
+.device-care-tag--top strong { font-size: 12px; color: #fff; font-weight: 600; }
+.device-care-tag-icon { display: grid; place-items: center; width: 30px; height: 34px; border-radius: 9px; color: #91e0ea; background: #6ec1e412; }
+.device-care-tag--bottom { bottom: 47px; left: 0; background: #fff; color: #183650; font-weight: 600; }
+.device-care-check { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; background: #e7f4ef; color: #167465; }
+.device-care-caption { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: -4px; font-size: 10px; color: #bfd6e7; letter-spacing: .02em; }
+.device-care-caption span { width: 5px; height: 5px; background: #ffab65; border-radius: 50%; }
+.device-care-visual--compact { max-width: 360px; }
+.auth-process { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid #ffffff18; margin-top: 20px; padding-top: 18px; gap: 10px; }
+.auth-process div { display: flex; align-items: center; gap: 9px; color: #e6eff8; font-size: 12px; }
+.auth-process span { font-size: 10px; color: #8edeea; }
+
+@media (min-width: 768px) and (max-width: 1100px) {
+  .repair-hero-layout { grid-template-columns: minmax(0, 1fr); }
+  .repair-hero-layout > .device-care-visual { display: none; }
+}
 @media (max-width: 767px) {
   .auth-form-card { padding: 26px 22px; border-radius: 20px; }
   .page-header { margin-bottom: 24px; }
-  .repair-hero { border-radius: 20px; }
+  .repair-hero { border-radius: 24px; padding: 24px; }
+  .repair-hero-layout { grid-template-columns: minmax(0, 1fr); }
+  .repair-hero-layout > .device-care-visual { max-width: 260px; margin-top: 14px; }
+  .hero-service-strip { column-gap: 14px; font-size: 10px; margin-top: 16px; }
+  .hero-kicker { font-size: 9px; letter-spacing: .1em; }
+  .engineer-welcome-art { right: -75px; color: #6ec1e414; }
   .hero-orbits { right: -180px; }
 }
 
 /* Keep mobile navigation labels aligned and on one line. */
-.mobile-nav { background: #fffffff2; border-top: 1px solid var(--color-thor-blue); }
+.mobile-header { box-shadow: 0 3px 16px #0f2a4d10; }
+.mobile-nav { background: #fffffff5; backdrop-filter: blur(16px); border-top: 1px solid #12233d12; box-shadow: 0 -4px 20px #12233d06; }
 .mobile-nav li { min-width: 0; }
 .mobile-tab { display: flex; width: 100%; height: 64px; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #7a7a7a; font-size: 10px; font-weight: 600; }
 .tab-icon { display: grid; place-items: center; width: 44px; height: 28px; border-radius: 10px; }
 .tab-label { max-width: 100%; white-space: nowrap; line-height: 16px; }
 .mobile-tab.active { color: #225aa5; }
+.mobile-tab.active .tab-icon { background: #e7effa; }
+
+/* Keep the primary actions and repair overview near the top on small phones. */
+@media (max-width: 479px) {
+  .repair-hero-layout > .device-care-visual { display: none; }
+  .hero-service-strip span { gap: 4px; }
+  .hero-service-strip { column-gap: 12px; }
+}
+
+/* Upgrade the existing chat surface without changing its request or intake logic. */
+[role="dialog"][aria-label="Thor Computer assistant"] { border: 1px solid #1736561f; box-shadow: 0 18px 60px #0f2a4d26; }
+[role="dialog"][aria-label="Thor Computer assistant"] > div:first-child { background: #102d50; border-bottom: 1px solid #6ec1e430; }
+button[aria-label="Open assistant"], button[aria-label="Close assistant"] { box-shadow: 0 8px 24px #225aa538, 0 0 0 4px #ffffff; }

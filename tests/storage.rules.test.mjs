@@ -1,9 +1,12 @@
 // Storage security rules, run against the local Storage + Firestore emulators (storage.rules reads Firestore for chat participants).
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
 import { doc, setDoc } from 'firebase/firestore'
-import { ref, uploadBytes, getBytes, deleteObject, updateMetadata } from 'firebase/storage'
+import { ref, uploadBytes, getBytes, getDownloadURL, deleteObject, updateMetadata } from 'firebase/storage'
 import { readFileSync } from 'node:fs'
 import test, { before, after, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
+import { revokeRequestPhotoLinks } from '../scripts/revoke-request-photo-links.mjs'
 
 let env
 const png = () => new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), png9mb = () => new Uint8Array(9 * 1024 * 1024)
@@ -53,16 +56,34 @@ test('qualification evidence is private: owner + reviewing admins only', async (
   await assertFails(deleteObject(ref(eng(), 'qualifications/eng1/cert.pdf')))                // immutable evidence
   await assertFails(put(eng(), 'qualifications/eng1/cert.pdf', png(), PDF))                  // no overwrite
 })
-test('repair photos: customer uploads to own folder; owner, admins and approved engineers read; pending engineers and other customers cannot', async () => {
-  await assertSucceeds(put(cust(), 'requests/custA/job1/p.png', png(), IMG))
+test('repair photos: private until selection, then only the selected engineer and authorised admins can read', async () => {
+  const path = 'requests/custA/job1/p.png'
+  await assertSucceeds(put(cust(), path, png(), IMG))
   await assertFails(put(cust2(), 'requests/custA/job1/q.png', png(), IMG))
   await assertFails(put(cust(), 'requests/custA/job1/q.pdf', png(), PDF))
-  await assertSucceeds(getBytes(ref(cust(), 'requests/custA/job1/p.png')))
-  await assertSucceeds(getBytes(ref(eng(), 'requests/custA/job1/p.png')))
-  await assertSucceeds(getBytes(ref(adm([]), 'requests/custA/job1/p.png')))
-  await assertFails(getBytes(ref(cust2(), 'requests/custA/job1/p.png')))
-  await assertFails(getBytes(ref(eng2(), 'requests/custA/job1/p.png')))
-  await assertFails(deleteObject(ref(cust(), 'requests/custA/job1/p.png')))
+  await assertSucceeds(getBytes(ref(cust(), path)))
+  const job = { customerId: 'custA', selectedEngineerId: null, photoPaths: [path] }
+  const setJob = data => env.withSecurityRulesDisabled(c => setDoc(doc(c.firestore(), 'repairRequests/custA_job1'), data))
+  await setJob(job)
+  await assertFails(getBytes(ref(eng(), path)))
+  await assertFails(getDownloadURL(ref(eng(), path)))
+  await assertFails(getBytes(ref(adm([]), path)))
+  await assertSucceeds(getBytes(ref(adm(['jobs.manage']), path)))
+  await assertFails(getBytes(ref(cust2(), path)))
+  await setJob({ ...job, selectedEngineerId: 'eng1' })
+  await assertSucceeds(getBytes(ref(eng(), path)))
+  await assertFails(getBytes(ref(as('eng3', { role: 'engineer', engineerApproved: true }), path)))
+  await assertFails(getBytes(ref(eng2(), path)))
+  await assertFails(getBytes(ref(as('eng1', { role: 'engineer', engineerApproved: true, suspended: true }), path)))
+  await assertFails(getBytes(ref(as('custA', { suspended: true }), path)))
+  await assertFails(getBytes(ref(as('adm1', { role: 'admin', perms: ['jobs.manage'], suspended: true }), path)))
+  await seed('requests/custA/job1/unlisted.png')
+  await assertFails(getBytes(ref(eng(), 'requests/custA/job1/unlisted.png')))
+  await seed('requests/custB/job2/private.png')
+  await assertFails(getBytes(ref(eng(), 'requests/custB/job2/private.png')))
+  await setJob({ ...job, selectedEngineerId: null })
+  await assertFails(getBytes(ref(eng(), path)))
+  await assertFails(deleteObject(ref(cust(), path)))
 })
 test('suspended users cannot upload', async () => {
   await assertFails(put(as('custA', { suspended: true }), 'avatars/custA/me.png', png(), IMG))
@@ -81,4 +102,26 @@ test('paths outside the known folders are denied for everyone', async () => {
   await assertFails(put(cust(), 'random/file.png', png(), IMG))
   await assertFails(put(adm(['admins.manage', 'settings.edit']), 'random/file.png', png(), IMG))
   await assertFails(getBytes(ref(adm(['admins.manage']), 'random/file.png')))
+})
+
+test('release migration: dry-run preserves links and apply refuses to claim success if Storage retains tokens', async () => {
+  assert.match(process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? '', /^(localhost|127\.0\.0\.1):/)
+  const require = createRequire(new URL('../functions/', import.meta.url))
+  const { initializeApp, deleteApp } = require('firebase-admin/app'), { getStorage } = require('firebase-admin/storage')
+  const app = initializeApp({ projectId: 'demo-thor' }, 'photo-link-migration')
+  try {
+    const bucket = getStorage(app).bucket('demo-thor.appspot.com'), token = '11111111-1111-4111-8111-111111111111'
+    const path = 'requests/custA/job1/legacy.png', avatar = 'avatars/custA/legacy.png'
+    for (const name of [path, avatar]) await bucket.file(name).save(png(), { metadata: { contentType: 'image/png', metadata: { firebaseStorageDownloadTokens: token, preserved: 'yes' } } })
+    const url = `http://${process.env.FIREBASE_STORAGE_EMULATOR_HOST}/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`
+    assert.equal((await fetch(url)).status, 200)
+    assert.deepEqual(await revokeRequestPhotoLinks(bucket), { scanned: 1, withTokens: 1, revoked: 0 })
+    assert.equal((await fetch(url)).status, 200)
+    // The local emulator preserves its separate downloadTokens array when the GCS metadata key is removed.
+    // Verify the migration detects this instead of reporting a successful revocation.
+    await assert.rejects(revokeRequestPhotoLinks(bucket, { apply: true }), /revocation not confirmed/)
+    assert.equal((await bucket.file(path).getMetadata())[0].metadata.preserved, 'yes')
+    assert.equal((await bucket.file(avatar).getMetadata())[0].metadata.firebaseStorageDownloadTokens, token)
+    assert.equal((await bucket.file(path).download())[0].length, png().length)
+  } finally { await deleteApp(app) }
 })

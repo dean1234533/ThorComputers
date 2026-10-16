@@ -370,7 +370,7 @@ await step('nothing is invented: publishing needs the owner’s business details
 
 section('Assistant: rules first, AI last')
 const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-const metrics = async () => (await A.db.doc(`chatMetrics/${today}`).get()).data() ?? {}
+const metrics = async () => { await new Promise(r => setTimeout(r, 700)); return (await A.db.doc(`chatMetrics/${today}`).get()).data() ?? {} }   // the counters are written after the reply, so give the last write a moment
 const chat = (who, text, state) => who.call('chatbotMessage', { text, state })
 const AI_Q = 'does thor computer work with apple pencil screen protectors on tablets in kent'
 const baseAi = { enabled: true, aiFallbackEnabled: true, welcome: 'Hi', escalation: '', knowledge: '', model: '', dailyLimit: 150, aiDailyLimit: 10, globalAiDailyLimit: 300, aiTimeoutMs: 8000, costInMicrosPer1k: 80, costOutMicrosPer1k: 320, faqOverrides: {}, customFaqs: [] }
@@ -396,10 +396,13 @@ await step('a mixed FAQ conversation (greeting, price, booking, payment, refund,
   const m0 = await metrics(); for (const t of ['hello', 'how much does a repair cost', 'how do i book an appointment', 'is it safe to pay by card', 'can i get a refund', 'is there a warranty', 'are the engineers verified', 'thanks']) { const r = await chat(cust, t); eq(r.source, 'rules', t) }
   const m1 = await metrics(); eq((m1.aiCalls ?? 0) - (m0.aiCalls ?? 0), 0); eq((m1.rules ?? 0) - (m0.rules ?? 0), 8)
 })
-await step('account questions are answered from the caller’s OWN repairs only; another customer sees only theirs', async () => {
+await step('account questions are answered from the caller’s OWN repairs only; with several active repairs it asks which; another customer sees only theirs', async () => {
   const other = await person('chatother', 'customer'); const oj = await other.call('createRepairRequest', reqIn('chat-other-job')); const mine = (await A.db.collection('repairRequests').where('customerId', '==', cust.uid).get()).docs.map(d => d.data().reference)
-  const a = await chat(cust, 'what is the status of my repair'), b = await chat(other, 'what is the status of my repair')
-  ok(mine.some(ref => a.reply.includes(ref)), a.reply); ok(!a.reply.includes(oj.reference), 'customer A saw customer B’s repair'); ok(b.reply.includes(oj.reference), b.reply); ok(!mine.some(ref => b.reply.includes(ref)), 'customer B saw customer A’s repair')
+  const ask = await chat(cust, 'what is the status of my repair'); eq(ask.reply, 'Which repair do you mean?'); ok(ask.quickReplies.length >= 2 && ask.quickReplies.every(q => mine.some(ref => q.label.startsWith(ref))), 'the choices must all be this customer’s repairs: ' + JSON.stringify(ask.quickReplies))
+  ok(!ask.quickReplies.some(q => q.label.includes(oj.reference)), 'customer A was offered customer B’s repair')
+  const pick = await chat(cust, ask.quickReplies[0].value, ask.state); ok(mine.some(ref => pick.reply.startsWith(ref + ':')) && !pick.reply.includes(oj.reference), pick.reply)
+  const b = await chat(other, 'what is the status of my repair'); ok(b.reply.includes(oj.reference) && !mine.some(ref => b.reply.includes(ref)), 'customer B saw customer A’s repair: ' + b.reply)
+  const foreign = await chat(cust, `what is the status of my repair ${oj.reference}`); ok(/can’t find/.test(foreign.reply) && !foreign.reply.includes('open for quotes'), 'a customer must not be able to look up someone else’s reference: ' + foreign.reply)
   ok(/appointment/i.test((await chat(other, 'when is my appointment')).reply))
 })
 await step('only signed-in CUSTOMERS can use it; engineers and admins are refused; oversize and tampered input is handled', async () => {
@@ -448,6 +451,48 @@ await step('admins manage FAQ content without code: rewrite, disable, add custom
   await setAi({ faqOverrides: { refunds: { answer: 'CUSTOM REFUND TEXT for {{supportEmail}}' }, warranty: { enabled: false } }, customFaqs: [{ id: 'custom_hours', questions: ['what are your opening hours', 'when are you open'], answer: 'We reply every day.' }] })
   let r = await chat(cust, 'can i get a refund'); ok(/CUSTOM REFUND TEXT for changed@thor-test\.example/.test(r.reply), r.reply); r = await chat(cust, 'when are you open'); eq(r.reply, 'We reply every day.')
   ok((await chat(cust, 'is there a warranty')).source !== 'rules' || !/warranty they offer/.test((await chat(cust, 'is there a warranty')).reply)); await setAi({})
+})
+await step('QA retest regression, AI SWITCHED OFF: the five assistant failures are answered by rules with zero AI calls, from current settings', async () => {
+  await setAi({ aiFallbackEnabled: false }); await sa.call('savePlatformSettings', { support: { email: 'regress@thor-test.example', phone: '0300 000000', hours: 'Daily' }, booking: { reminderHours: [24], leadMinutes: 120, cancelNoticeHours: 36 }, pricingGuidance: 'Quotes are agreed after a free diagnosis.' })
+  const m0 = await metrics(), u = await person('regress', 'customer')
+  const priceR = await chat(u, 'How much do repares cost?'); eq(priceR.source, 'rules'); ok(/Quotes are agreed after a free diagnosis\./.test(priceR.reply) && !/£\s?\d/.test(priceR.reply), priceR.reply)
+  const privR = await chat(u, 'What information can an engineer see about me?'); eq(privR.source, 'rules'); ok(/approximate area/.test(privR.reply) && /cannot see your name, phone number, email, exact postcode/.test(privR.reply), privR.reply)
+  const payR = await chat(u, 'How do I pay for my repair?'); eq(payR.source, 'rules'); ok(/Pay securely/.test(payR.reply) && /payment setup/.test(payR.reply) && !/THR-/.test(payR.reply), payR.reply)
+  const noticeR = await chat(u, 'How much notice do I need to cancel?'); eq(noticeR.source, 'rules'); ok(/at least 36 hours/.test(noticeR.reply), noticeR.reply)
+  const humanR = await chat(u, 'i want to talk to a human'); ok(/regress@thor-test\.example/.test(humanR.reply) && /0300 000000/.test(humanR.reply), humanR.reply)
+  const clar = await chat(u, 'cancel'); eq(clar.quickReplies.map(q => q.value).sort(), ['faq:cancel_appointment', 'faq:cancel_repair'])
+  const combo = await chat(u, 'I need a Dell laptop repaired because it will not turn on. Remote assistance, E15 1AA, flexible. QA test only.'); eq(combo.source, 'rules'); eq(combo.ready, true); eq(combo.openForm, false)
+  eq(combo.draft, { device: 'laptop', manufacturer: 'Dell', problem: 'It will not turn on. QA test only', serviceMethods: ['remote'], postcode: 'E15 1AA', urgency: 'flexible' })
+  const m1 = await metrics(); eq((m1.aiCalls ?? 0) - (m0.aiCalls ?? 0), 0, 'no AI request may be made'); eq((m1.ai ?? 0) - (m0.ai ?? 0), 0)
+  globalThis.regress = { u, draft: combo.draft }
+})
+await step('review is not submit; the customer then submits explicitly and the PUBLIC request carries no postcode while the private fields hold it', async () => {
+  const { u, draft } = globalThis.regress, jobs = async () => (await A.db.collection('repairRequests').where('customerId', '==', u.uid).get()).size, j0 = await jobs()
+  const go = await chat(u, 'review and submit', (await chat(u, 'I need a Dell laptop repaired because it will not turn on. Remote assistance, E15 1AA, flexible. QA test only.')).state); eq(go.openForm, true); eq(await jobs(), j0, 'opening the form must not create a request')
+  const r = await u.call('createRepairRequest', reqIn('regress-explicit-submit', { device: { type: draft.device, manufacturer: draft.manufacturer, model: '' }, description: draft.problem, serviceMethods: draft.serviceMethods, urgency: draft.urgency, postcode: draft.postcode }))
+  const pub = (await A.db.doc(`repairRequests/${r.jobId}`).get()).data(), priv = (await A.db.doc(`repairRequests/${r.jobId}/private/details`).get()).data()
+  eq(pub.description, 'It will not turn on. QA test only'); ok(!/E15|1AA|remote/i.test(JSON.stringify([pub.description, pub.summary])), 'postcode leaked into public text'); eq(priv.postcode, 'E15 1AA'); eq(pub.location.outcode, 'E15')
+})
+await step('server defence in depth: a postcode, phone or email typed straight into the form description is removed from the public text and kept privately', async () => {
+  const { u } = globalThis.regress, r = await u.call('createRepairRequest', reqIn('regress-manual-pii', { description: 'Will not boot. I live at 12 High Street, E15 1AA, call me on 07700 900123 or pia@example.com' }))
+  const pub = (await A.db.doc(`repairRequests/${r.jobId}`).get()).data(), priv = (await A.db.doc(`repairRequests/${r.jobId}/private/details`).get()).data()
+  ok(!/E15|1AA|07700|@|High Street/.test(JSON.stringify([pub.description, pub.summary])), JSON.stringify([pub.description, pub.summary])); ok(/Will not boot/.test(pub.description)); ok(/07700 900123/.test(priv.descriptionOriginal), 'the original must be kept privately')
+})
+await step('request photos cannot reference another request, a nested path or a different owner', async () => {
+  for (const path of [`requests/${cust.uid}/other-request/p.png`, `requests/${cust.uid}/photo-boundary/nested/p.png`, `requests/not-the-owner/photo-boundary/p.png`]) {
+    await denied(cust.call('createRepairRequest', reqIn('photo-boundary', { photoPaths: [path] })), 'invalid-argument')
+  }
+})
+await step('the privacy FAQ matches the REAL access rules: bidders see the public job but not the private details; after acceptance only the chosen engineer does', async () => {
+  const bidder = await person('privbidder', 'engineer', { engineerApproved: true, specs: ['laptop'] }); await A.db.doc(`engineerProfiles/${bidder.uid}`).set({ status: 'approved', specialisations: ['laptop'], provider: 'independent' })
+  const j = (await cust.call('createRepairRequest', reqIn('privacy-rules-job', { description: 'Fan is noisy and it overheats' }))).jobId
+  const pubDoc = await getDoc(doc(bidder.db, `repairRequests/${j}`)); ok(pubDoc.exists()); const keys = Object.keys(pubDoc.data())
+  for (const k of ['fullName', 'phone', 'email', 'postcode', 'addressLine', 'serialNumber', 'exactLat', 'accessNotes', 'customerContact']) ok(!keys.includes(k), `the public job exposes ${k}`)
+  ok(keys.includes('photoPaths') && keys.includes('urgency') && keys.includes('serviceMethods') && keys.includes('location'), 'public request metadata remains visible; Storage rules separately protect the photo bytes')
+  await denied(getDoc(doc(bidder.db, `repairRequests/${j}/private/details`)), 'permission-denied')
+  const q = (await eng.call('submitQuote', quoteIn(j))).quoteId; await cust.call('acceptQuote', { quoteId: q })
+  await denied(getDoc(doc(bidder.db, `repairRequests/${j}`)), 'permission-denied'); await denied(getDoc(doc(bidder.db, `repairRequests/${j}/private/details`)), 'permission-denied')
+  const mine = (await getDoc(doc(eng.db, `repairRequests/${j}/private/details`))).data(); ok(mine.postcode && mine.customerContact?.email, 'the chosen engineer must get the exact details after acceptance')
 })
 await step('only aggregate counters are stored: no message text, no user ids, in metrics, usage or cache', async () => {
   const m = await metrics(); ok(Object.keys(m).every(k => /^(day|updatedAt|messages|rules|ai|fallback|cacheHits|aiCalls|aiFailures|ai_[a-z]+|latencyMsTotal|aiLatencyMsTotal|tokensIn|tokensOut|costMicros|intakesStarted|intakesOpened|escalations)$/.test(k)), JSON.stringify(Object.keys(m)))

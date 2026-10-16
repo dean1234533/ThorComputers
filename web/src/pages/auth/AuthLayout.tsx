@@ -1,8 +1,9 @@
 import { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
-import { ShieldCheck, ArrowUpRight, Check, Laptop, MapPin, LockKeyhole } from 'lucide-react'
+import { ArrowUpRight, Check, MapPin, LockKeyhole } from 'lucide-react'
 import { Logo } from '@/components/ui'
+import DeviceCareVisual from '@/components/DeviceCareVisual'
 
 export default function AuthLayout({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   const reduce = useReducedMotion()
@@ -14,13 +15,9 @@ export default function AuthLayout({ title, sub, children }: { title: string; su
           <p className="mb-5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[.2em] text-thor-sky"><span className="size-1.5 rounded-full bg-thor-sky" />Your local repair network</p>
           <h2 className="font-display text-[clamp(36px,3.8vw,58px)] font-semibold leading-[1.12]">Great technology.<br />Even better <span className="text-thor-sky">care.</span></h2>
           <p className="mt-5 max-w-sm text-sm leading-7 text-white/55">From the first quote to the final fix. Connect with qualified engineers and give your devices a new lease of life.</p>
-          <div className="auth-visual" aria-hidden="true">
-            <div className="device-card p-6">
-              <div className="flex items-center justify-between"><span className="text-[10px] uppercase tracking-[.17em] text-white/50">A simpler repair experience</span><span className="flex gap-1"><i className="size-1 rounded-full bg-white/40" /><i className="size-1 rounded-full bg-white/40" /><i className="size-1 rounded-full bg-white/40" /></span></div>
-              <div className="flex items-center gap-5 py-6"><span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-white/5"><Laptop className="size-9 text-thor-sky" strokeWidth={1.2} /></span><div><p className="font-display text-lg font-semibold">Your device. In good hands.</p><p className="mt-1 text-xs text-white/45">Expert help, every step of the way.</p></div></div>
-              <div className="flex items-center justify-between border-t border-white/10 pt-5">{['Request', 'Compare', 'Repair'].map((step, i) => <div key={step} className="flex items-center gap-2 text-xs text-white/65"><span className="grid size-5 place-items-center rounded-full bg-thor-sky/15 text-[10px] text-thor-sky">{i + 1}</span>{step}</div>)}</div>
-            </div>
-            <div className="relative -mt-3 ml-auto mr-4 flex w-fit items-center gap-2 rounded-full border border-white/15 bg-thor-blue-700 px-4 py-2.5 text-xs text-thor-sky shadow-lg"><ShieldCheck className="size-4" />Credentials checked by our team</div>
+          <div className="auth-visual">
+            <DeviceCareVisual compact />
+            <div className="auth-process" aria-label="How it works">{['Request', 'Compare', 'Repair'].map((step, i) => <div key={step}><span>{String(i + 1).padStart(2, '0')}</span>{step}</div>)}</div>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-3 text-xs text-white/60">{['Clear quotes', 'Flexible appointments', 'Local expertise'].map(t => <span key={t} className="flex items-center gap-2"><Check className="size-3.5 text-thor-sky" />{t}</span>)}</div>
         </div>

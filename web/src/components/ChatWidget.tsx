@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Bot, Send, X, LifeBuoy, RotateCcw } from 'lucide-react'
 import { useDoc } from '@/hooks/useFirestore'
 import { api, errMsg, QuickReply, ChatReply } from '@/lib/api'
@@ -11,13 +11,15 @@ const TOPICS: QuickReply[] = [{ label: 'Request a repair', value: 'faq:start_rep
 
 /** Guided assistant. Almost everything is answered by deterministic rules on the server; the AI is only a last resort there. Submitting a repair always happens on the normal request form, after the customer reviews it. */
 export default function ChatWidget() {
-  const nav = useNavigate(); const ps = useDoc<PublicSettings>('platformSettings/public')
+  const nav = useNavigate(); const { pathname } = useLocation(); const ps = useDoc<PublicSettings>('platformSettings/public')
   const [open, setOpen] = useState(false), [msgs, setMsgs] = useState<Msg[]>([]), [quick, setQuick] = useState<QuickReply[]>(TOPICS), [text, setText] = useState(''), [busy, setBusy] = useState(false), [slow, setSlow] = useState(false)
   const [draft, setDraft] = useState<ChatReply['draft']>(null), [escalate, setEscalate] = useState(false), [err, setErr] = useState(''), [last, setLast] = useState<{ text: string; label: string } | null>(null)
   const state = useRef<unknown>({}); const end = useRef<HTMLDivElement>(null)
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [msgs, busy, open, quick, err])
   useEffect(() => { if (!busy) { setSlow(false); return } const t = setTimeout(() => setSlow(true), 6000); return () => clearTimeout(t) }, [busy])
   const ai = ps.data?.ai; if (ai && !ai.enabled) return null
+  // The round button must never sit on top of a form's Continue/Send bar, so it is hidden on those screens.
+  if (!open && /^\/(customer\/new-request|messages)/.test(pathname)) return null
   const support = ps.data?.support
 
   const send = async (value: string, label = value) => {
@@ -48,7 +50,7 @@ export default function ChatWidget() {
           {escalate && <div className="rounded-2xl bg-warn/10 p-3"><p className="flex items-center gap-1.5 font-medium"><LifeBuoy className="size-4" />Talk to a person</p>
             {support?.email && <p>Email <a className="text-thor-blue underline" href={`mailto:${support.email}`}>{support.email}</a></p>}{support?.phone && <p>Call <a className="text-thor-blue underline" href={`tel:${support.phone.replace(/\s+/g, '')}`}>{support.phone}</a></p>}{support?.hours && <p className="text-xs text-thor-text">{support.hours}</p>}
             {!support?.email && !support?.phone && <p>{ai?.escalation || 'Please contact Thor Computer using the details on thorcomputer.com.'}</p>}</div>}
-          {quick.length > 0 && !busy && <div className="flex flex-wrap gap-2" aria-label="Suggested replies">{quick.map(q => <button key={q.value + q.label} onClick={() => send(q.value, q.label)} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-thor-blue ring-1 ring-thor-blue/30 hover:bg-thor-sky/10">{q.label}</button>)}</div>}
+          {quick.length > 0 && !busy && <div className="flex flex-wrap gap-2" aria-label="Suggested replies">{quick.filter(q => !(draft && q.value === 'review and submit')).map(q => <button key={q.value + q.label} onClick={() => send(q.value, q.label)} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-thor-blue ring-1 ring-thor-blue/30 hover:bg-thor-sky/10">{q.label}</button>)}</div>}
           <div ref={end} /></div>
         <form className="flex gap-2 border-t border-ink/10 p-3" onSubmit={e => { e.preventDefault(); void send(text) }}>
           <input aria-label="Message" className="min-w-0 flex-1 rounded-xl border border-ink/15 px-3 py-2" placeholder="Type a question…" maxLength={500} value={text} onChange={e => setText(e.target.value)} />

@@ -74,7 +74,9 @@ export function JobDetail() {
       <h1 className="font-display text-3xl">{devLabel(job.device.type)} · {job.device.manufacturer} {job.device.model}</h1>
       <p className="mt-1 flex items-center gap-1.5 text-sm text-thor-text"><MapPin className="size-4" />{job.location.area} · posted {age(job.createdAt?.toDate())}</p>
       <Section title="The problem"><p className="whitespace-pre-line">{job.description}</p>{job.issues.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{job.issues.map(i => <Badge key={i} tone="info">{i}</Badge>)}</div>}
-        {job.photoPaths?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{job.photoPaths.map(p => <StorageImg key={p} path={p} className="size-24 rounded-xl object-cover" />)}</div>}
+        {job.photoPaths?.length > 0 && (job.selectedEngineerId === user!.uid
+          ? <div className="mt-4 flex flex-wrap gap-2">{job.photoPaths.map(p => <StorageImg key={p} path={p} className="size-24 rounded-xl object-cover" />)}</div>
+          : <p className="mt-4 rounded-xl bg-paper p-3 text-sm text-thor-text">The customer has attached photos. They’ll be shared with the engineer they choose after accepting a quote.</p>)}
         <p className="mt-3 text-sm text-thor-text">Wanted: {job.serviceMethods.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(', ')} · Urgency: {job.urgency}</p></Section>
 
       {q && !editable && <p className="rounded-xl bg-paper p-4 text-sm">Your quote of <b>{gbp(q.totalPence)}</b> is <b>{q.status}</b>.</p>}
@@ -124,7 +126,7 @@ export function ContactCard({ c, who, messageTo }: { c?: { name: string; phone: 
 }
 
 export function MyJobDetail() {
-  const { id } = useParams(); const toast = useToast()
+  const { id } = useParams(); const toast = useToast(); const { user } = useAuth()
   const { data: job, loading } = useDoc<Job>(`repairRequests/${id}`)
   const priv = useDoc<{ addressLine?: string; postcode: string; accessNotes?: string; serialNumber?: string; customerContact?: { name: string; phone: string; email: string } }>(job && job.status !== 'open' ? `repairRequests/${id}/private/details` : null)
   const [busy, setBusy] = useState(''); const [rev, setRev] = useState(false)
@@ -140,6 +142,7 @@ export function MyJobDetail() {
       <Section title="Customer contact"><ContactCard c={priv.data?.customerContact} who="customer" messageTo={job.acceptedQuoteId ? `/messages/${job.acceptedQuoteId}` : undefined} /></Section>
       <Section title="Payment & extra work"><p className="mb-3 flex items-center gap-2 text-sm">Customer payment: {(job as { paymentStatus?: string }).paymentStatus === 'paid' ? <span className="rounded-full bg-ok/15 px-2.5 py-0.5 font-medium text-ok">Paid</span> : <span className="rounded-full bg-warn/15 px-2.5 py-0.5 font-medium text-warn">Not paid yet</span>}</p><ExtraWorkForm jobId={job.id} status={job.status} /></Section>
       <Section title="Job details"><p className="whitespace-pre-line">{job.description}</p>
+        {job.selectedEngineerId === user!.uid && job.photoPaths?.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{job.photoPaths.map(path => <StorageImg key={path} path={path} className="size-24 rounded-xl object-cover" />)}</div>}
         <dl className="mt-4 space-y-2 rounded-2xl bg-white p-4 text-sm shadow-sm ring-1 ring-ink/5"><div className="flex justify-between"><dt className="text-thor-text">Agreed price</dt><dd className="font-bold">{gbp(job.agreedTotalPence ?? 0)}</dd></div>
           {priv.data?.addressLine && <div className="flex justify-between gap-4"><dt className="text-thor-text">Address</dt><dd className="text-right">{priv.data.addressLine}, {priv.data.postcode}</dd></div>}
           {priv.data?.accessNotes && <div className="flex justify-between gap-4"><dt className="text-thor-text">Access</dt><dd className="text-right">{priv.data.accessNotes}</dd></div>}

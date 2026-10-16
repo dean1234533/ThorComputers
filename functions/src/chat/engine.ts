@@ -3,11 +3,12 @@
 import { METHODS_FOR, METHOD_LABEL, JOB_STATUS_LABEL, DEVICE_LABEL } from '../catalog'
 import { FAQ, FAQ_BY_ID, GENERIC_NO_MATCH, type FaqIntent, type QuickReply } from './faq'
 import { buildWeights, decide, onTopic, scoreIntents, tokens, CONFIDENT, type IntentDef } from './nlu'
-import { Ask, IntakeState, Slots, allowedMethods, changeTarget, detectDevice, emptyIntake, extract, hasSymptom, isComplete, isQuestion, isRestart, isYes, nextAsk, question, summary, toDraft } from './intake'
+import { Ask, IntakeState, Slots, allowedMethods, changeTarget, detectDevice, detectMethod, detectPostcode, emptyIntake, extract, hasSymptom, isComplete, isQuestion, isRestart, isYes, nextAsk, question, summary, toDraft } from './intake'
 
 export interface ChatFacts {
   support?: { email?: string; phone?: string; hours?: string }; booking?: { cancelNoticeHours?: number; reminderHours?: number[] }; categories?: string[]; coverage?: { areas?: string[]; note?: string }
   directWarranty?: string; directTerms?: string; refundPolicy?: string; cancellationPolicy?: string; marketplaceDisclaimer?: string; escalation?: string
+  pricingGuidance?: string; requirePaymentBeforeBooking?: boolean
 }
 export interface AccountFacts { jobs: { reference: string; status: string; quoteCount: number; paid: boolean; agreedPence?: number }[]; nextAppointment?: { reference: string; startAt: number } | null }
 export interface CustomFaq { id: string; questions: string[]; answer: string }
@@ -36,8 +37,9 @@ export function render(tpl: string, f: ChatFacts): string {
     support: supportLine(f), supportEmail: f.support?.email ?? '', supportPhone: f.support?.phone ?? '', supportHours: f.support?.hours ?? '', cancelNoticeHours: f.booking?.cancelNoticeHours != null ? String(f.booking.cancelNoticeHours) : '',
     reminderHours: joinList(f.booking?.reminderHours?.map(String)), categories: joinList(f.categories), coverage: [joinList(f.coverage?.areas), f.coverage?.note].filter(Boolean).join('. '), directWarranty: f.directWarranty ?? '', directTerms: f.directTerms ?? '',
     refundPolicy: f.refundPolicy ?? '', cancellationPolicy: f.cancellationPolicy ?? '', marketplaceDisclaimer: f.marketplaceDisclaimer ?? '', escalation: f.escalation ?? '', methodRules: methodRules(),
+    pricingGuidance: f.pricingGuidance ?? '', payFirst: f.requirePaymentBeforeBooking ? 'yes' : '',
   }
-  return tpl.replace(/\[\[if:(\w+)\]\]([\s\S]*?)\[\[\/if\]\]/g, (_m, k: string, body: string) => v[k] ? body : '').replace(/\{\{(\w+)\}\}/g, (_m, k: string) => v[k] ?? '').replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,])/g, '$1').trim()
+  return tpl.replace(/\[\[ifnot:(\w+)\]\]([\s\S]*?)\[\[\/if\]\]/g, (_m, k: string, body: string) => v[k] ? '' : body).replace(/\[\[if:(\w+)\]\]([\s\S]*?)\[\[\/if\]\]/g, (_m, k: string, body: string) => v[k] ? body : '').replace(/\{\{(\w+)\}\}/g, (_m, k: string) => v[k] ?? '').replace(/[ \t]{2,}/g, ' ').replace(/\s+([.,])/g, '$1').trim()
 }
 
 // ---------- intent table (built-in FAQ + admin overrides/custom entries) ----------
@@ -65,14 +67,31 @@ const result = (r: Partial<TurnResult> & Pick<TurnResult, 'reply' | 'state'>): T
 const fmtDate = (ms: number) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/London' }).format(new Date(ms))
 const gbp = (p: number) => `£${(p / 100).toFixed(2)}`
 
-async function accountAnswer(kind: NonNullable<FaqIntent['account']>, deps: Deps): Promise<string> {
+const REF = /\bTHR-[A-Z0-9]{3,}\b/i
+const ACTIVE = new Set(['open', 'engineer_selected', 'appointment_scheduled', 'on_the_way', 'in_progress', 'awaiting_parts'])
+const stripRef = (t: string) => t.replace(new RegExp(REF.source, 'gi'), ' ')
+
+/** Answers about the signed-in customer's OWN repairs (the account provider is already scoped to the caller). If several repairs could be meant and the customer did not name one, ask which. */
+async function accountAnswer(kind: NonNullable<FaqIntent['account']>, text: string, deps: Deps): Promise<{ reply: string; quick?: QuickReply[] }> {
   const a = deps.account ? await deps.account() : { jobs: [] }
-  if (!a.jobs.length && kind !== 'appointment') return 'You don’t have any repair requests yet. I can help you start one.'
+  if (!a.jobs.length && kind !== 'appointment') return { reply: 'You don’t have any repair requests yet. I can help you start one.' }
+  const ref = text.match(REF)?.[0]?.toUpperCase(), byRef = ref ? a.jobs.filter(j => j.reference.toUpperCase() === ref) : []
+  if (ref && !byRef.length) return { reply: `I can’t find ${ref} on your account. Check the reference on your repair, or tell me what you need.` }
+  const ask = (jobs: typeof a.jobs, phrase: string) => ({ reply: 'Which repair do you mean?', quick: jobs.slice(0, 5).map(j => q(`${j.reference} (${JOB_STATUS_LABEL[j.status] ?? j.status})`, `${phrase} ${j.reference}`)) })
   switch (kind) {
-    case 'status': return a.jobs.slice(0, 3).map(j => `${j.reference}: ${JOB_STATUS_LABEL[j.status] ?? j.status}${j.status === 'open' ? `, ${j.quoteCount} quote${j.quoteCount === 1 ? '' : 's'} so far` : ''}.`).join('\n')
-    case 'quotes': { const open = a.jobs.filter(j => j.status === 'open'); return open.length ? open.slice(0, 3).map(j => `${j.reference} has ${j.quoteCount} quote${j.quoteCount === 1 ? '' : 's'}${j.quoteCount ? ' ready to compare' : ' so far; engineers are being notified'}.`).join('\n') : 'None of your repairs is waiting for quotes right now.' }
-    case 'appointment': return a.nextAppointment ? `Your next appointment is for ${a.nextAppointment.reference} on ${fmtDate(a.nextAppointment.startAt)} (UK time).` : 'You have no upcoming appointments. Once you choose an engineer you can book a time on the repair.'
-    case 'payment': { const chosen = a.jobs.filter(j => j.agreedPence != null); return chosen.length ? chosen.slice(0, 3).map(j => `${j.reference}: ${j.paid ? 'paid' : `${gbp(j.agreedPence!)} agreed and not paid yet. Open the repair and press Pay securely.`}`).join('\n') : 'Nothing is due yet. You pay after you choose an engineer’s quote.' }
+    case 'status': {
+      const pool = byRef.length ? byRef : a.jobs.filter(j => ACTIVE.has(j.status)), shown = pool.length ? pool : a.jobs.slice(0, 1)
+      if (!ref && pool.length > 1) return ask(pool, 'what is the status of my repair')
+      return { reply: shown.map(j => `${j.reference}: ${JOB_STATUS_LABEL[j.status] ?? j.status}${j.status === 'open' ? `, ${j.quoteCount} quote${j.quoteCount === 1 ? '' : 's'} so far` : ''}.`).join('\n') }
+    }
+    case 'quotes': { const open = a.jobs.filter(j => j.status === 'open' && (!byRef.length || byRef.includes(j))); return { reply: open.length ? open.slice(0, 3).map(j => `${j.reference} has ${j.quoteCount} quote${j.quoteCount === 1 ? '' : 's'}${j.quoteCount ? ' ready to compare' : ' so far; engineers are being notified'}.`).join('\n') : 'None of your repairs is waiting for quotes right now.' } }
+    case 'appointment': return { reply: a.nextAppointment ? `Your next appointment is for ${a.nextAppointment.reference} on ${fmtDate(a.nextAppointment.startAt)} (UK time).` : 'You have no upcoming appointments. Once you choose an engineer you can book a time on the repair.' }
+    case 'payment': {
+      const chosen = (byRef.length ? byRef : a.jobs).filter(j => j.agreedPence != null && j.status !== 'cancelled')
+      if (!chosen.length) return { reply: 'Nothing is due yet. You pay after you accept an engineer’s quote. To pay, open the repair and press Pay securely.' }
+      if (!ref && chosen.length > 1) return ask(chosen, 'have i paid for my repair')
+      return { reply: chosen.slice(0, 3).map(j => `${j.reference}: ${j.paid ? 'paid' : `${gbp(j.agreedPence!)} agreed and not paid yet. Open the repair and press Pay securely.`}`).join('\n') }
+    }
   }
 }
 
@@ -137,7 +156,8 @@ async function intakeTurn(text: string, state: ChatState, deps: Deps, table: Ret
   return result({ reply: `${note}${next.reply}`, quick: next.quick, state: { ...state, intake: it }, intent: 'intake_step' })
 }
 
-function routeFaq(text: string, table: ReturnType<typeof intentTable>, _deps: Deps) {
+function routeFaq(textIn: string, table: ReturnType<typeof intentTable>, _deps: Deps) {
+  const text = stripRef(textIn)
   let w = weightsCache.get(table.defs); if (!w) { w = buildWeights(table.defs); weightsCache.set(table.defs, w) }
   const extra = (_deps.custom ?? []).flatMap(c => c.questions.flatMap(x => tokens(x)))
   return decide(scoreIntents(text, table.defs, w, extra))
@@ -147,7 +167,7 @@ async function answerIntent(id: string, text: string, state: ChatState, deps: De
   const it = table.byId.get(id)!, repeated = state.lastIntent === id, repeat = repeated ? (state.repeat ?? 0) + 1 : 0
   const base: ChatState = { ...state, lastIntent: id, repeat, choice: undefined }
   if (it.action === 'start_intake') return startIntake(text, base)
-  if (it.account) return result({ reply: await accountAnswer(it.account, deps), quick: faqQuick(it.quick, table.byId), state: base, intent: id })
+  if (it.account) { const r = await accountAnswer(it.account, text, deps); return result({ reply: r.reply, quick: r.quick ?? faqQuick(it.quick, table.byId), state: r.quick ? { ...base, lastIntent: undefined } : base, intent: id }) }
   let reply = render(it.answer, deps.facts)
   if (repeated) reply = repeat >= 2 ? `${reply}\n\nIf that doesn’t answer it, our team can help. ${supportLine(deps.facts)}` : `Of course, here it is again.\n\n${reply}`
   const escalate = id === 'contact_support' || id === 'problem_with_repair' || repeat >= 2
@@ -191,7 +211,7 @@ export async function handleTurn(textIn: string, stateIn: ChatState, deps: Deps)
 
   // 5. FAQ and account intents
   const first = routeFaq(text, table, deps)
-  const problemStatement = !isQuestion(text) && (hasSymptom(text) || (!!detectDevice(text) && /\b(my|our|the|i have|i've got|i got)\b/i.test(text)))
+  const problemStatement = !isQuestion(text) && (hasSymptom(text) || (!!detectDevice(text) && (/\b(my|our|the|i have|i've got|i got)\b/i.test(text) || !!detectPostcode(text) || !!detectMethod(text))))
   if (first.kind === 'match' && !(problemStatement && first.score < 0.8 && !state.intake?.active)) return answerIntent(first.id, text, state, deps, table)
   if (first.kind === 'ambiguous' && !problemStatement) {
     const ids = first.ids.filter(id => table.byId.has(id))

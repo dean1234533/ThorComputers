@@ -32,7 +32,7 @@ export default function EngineerProfile() {
         <dl className="mt-6 grid grid-cols-3 gap-4 border-t border-white/15 pt-5 text-center"><div><dt className="text-xs text-white/70">Experience</dt><dd className="font-medium">{e.yearsExperience} yrs</dd></div><div><dt className="text-xs text-white/70">Jobs completed</dt><dd className="font-medium">{e.completedJobs}</dd></div><div><dt className="text-xs text-white/70">Area</dt><dd className="font-medium">{e.areasCovered?.[0] ?? 'Not listed'}</dd></div></dl>
       </header>
 
-      <div className="mt-6 grid gap-8 md:grid-cols-[1fr_20rem]">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-8">
           <section><h2 className="mb-2 font-display text-xl">About</h2><p className="whitespace-pre-line leading-relaxed text-thor-slate">{e.bio || 'This engineer has not added a biography.'}</p></section>
           <section><h2 className="mb-3 font-display text-xl">Specialisations</h2><div className="flex flex-wrap gap-2">{e.specialisations.map(s => <Badge key={s} tone="info"><Wrench className="size-3" />{SPECIALISATIONS.find(x => x.id === s)?.label ?? s}</Badge>)}</div></section>

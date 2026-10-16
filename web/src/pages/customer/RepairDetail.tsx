@@ -44,8 +44,8 @@ export default function RepairDetail() {
       <h1 className="font-display text-3xl">{job.device.manufacturer} {job.device.model}</h1>
       <p className="mt-1 flex items-center gap-1.5 text-sm text-thor-text"><MapPin className="size-4" />{job.location.area} · {DEVICE_TYPES.find(d => d.id === job.device.type)?.label}</p>
 
-      <div className="mt-6 grid gap-8 md:grid-cols-[1fr_16rem]">
-        <div>
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-8 md:grid-cols-[minmax(0,1fr)_16rem]">   {/* minmax(0,…): a column may shrink below its content, so the day strip scrolls inside itself instead of widening the page */}
+        <div className="min-w-0">
           {job.status === 'open' && <Section title={live.length ? 'Compare quotations' : 'Awaiting quotations'}>
             {quotes.loading ? <ListSkeleton rows={2} /> : live.length === 0 ? <EmptyState icon={CalendarClock} title="Engineers are reviewing your request" body="You’ll get a notification as soon as the first quote arrives." /> : <QuoteCompare quotes={live} onSelect={select} busyId={busy} canSelect />}</Section>}
 
@@ -57,7 +57,7 @@ export default function RepairDetail() {
             <div className="mt-3"><ContactCard c={priv.data?.engineerContact} who="engineer" messageTo={`/messages/${job.acceptedQuoteId}`} /></div>
             <Link to={`/messages/${job.acceptedQuoteId}`} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-thor-blue"><MessageSquare className="size-4" />Message your engineer</Link></Section>}
 
-          {job.acceptedQuoteId && !['cancelled'].includes(job.status) && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} messageTo={`/messages/${job.acceptedQuoteId}`} /></Section>}
+          {job.acceptedQuoteId && !['cancelled'].includes(job.status) && !(job.status === 'closed' && job.paymentStatus !== 'paid') && <Section title="Payment"><PaymentPanel jobId={job.id} agreedPence={job.agreedTotalPence ?? 0} paymentStatus={job.paymentStatus} messageTo={`/messages/${job.acceptedQuoteId}`} /></Section>}
 
           {job.status === 'engineer_selected' && <Section title="Book your appointment"><BookingPanel jobId={job.id} needsAddress={needsAddress} onBooked={() => {}} /></Section>}
 

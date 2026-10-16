@@ -23,6 +23,14 @@ Greetings, thanks, repeated questions (the 2nd gets "here it is again", the 3rd 
 | New built-in intent, synonyms, typos | `chat/faq.ts`, `chat/nlu.ts` (CANON, TYPOS, PHRASES), then add phrases to `TABLE` in `chat.test.ts`. |
 | Intake questions, device/brand lists, symptoms | `chat/intake.ts`; supported devices/methods come from `catalog.ts` (shared with request validation). |
 
+## Pricing guidance
+
+**Admin → Platform Settings → Pricing guidance** is optional approved wording (up to 800 characters). Saving it updates `platformSettings/public.pricingGuidance`. Common pricing questions and misspellings use the deterministic Prices FAQ first, including when AI is disabled. Its `{{pricingGuidance}}` placeholder inserts the current setting. If empty, the assistant explains quotation-based pricing; it does not invent a price list. If you override the Prices FAQ, retain the placeholder to keep using this setting. Pricing guidance is also included in the AI’s approved knowledge; it does not change accepted quotes, checkout prices or commissions.
+
+## Request photo privacy
+
+Request photos are readable by their customer, the selected approved engineer and unsuspended admins with `jobs.manage`. Engineers bidding on an open request see a notice, not the photos. Storage checks the selected engineer and the photo’s membership in that exact request; knowing the path or being approved is insufficient. Request creation also rejects photos belonging to a different request. The web app downloads request photos through authenticated `getBlob` and displays temporary object URLs rather than reusable Firebase download links.
+
 ## Repair intake
 Deterministic: device → make/model → problem → service method (limited by device) → postcode → urgency. Several answers in one message are understood. "Change postcode", "actually it’s a Dell", "start over" work at any time; a question in the middle is answered and the pending step is repeated. The result is a **draft** that pre-fills the normal request form; the customer reviews and presses Submit. The assistant never creates a job (tested).
 
@@ -46,3 +54,19 @@ TTL policies: Firebase console → Firestore → Time-to-live → add `chatCache
 ## Troubleshooting
 * "Connection to Gemini: problem" in the settings page shows the exact reason (invalid key, quota, unknown model…). Everything except open-ended questions keeps working meanwhile.
 * A phrase gets the wrong answer: add it to `TABLE` in `chat.test.ts`, then tune `faq.ts`/`nlu.ts` until the table passes. Thresholds: `CONFIDENT` 0.55, `CLOSE` 0.12, `FLOOR` 0.4 in `nlu.ts`.
+
+## Releasing the photo-access change
+
+Deploy the backend, Storage rules and frontend together. Authenticated browser downloads require the bucket's CORS policy to allow GET from the deployed app origin; keep allowed origins explicit (see Firebase's web download documentation).
+
+Old Firebase token links can outlive a rules change. The new UI does not request such links for request photos. Before considering the rollout complete, invalidate the old request-photo tokens using the one-time script below. It preserves the image bytes and other metadata and does not touch avatar/qualification/chat paths. It rereads metadata after each change and stops if token revocation is not confirmed; the local emulator is known to retain its separate download-token list after a GCS metadata patch, so actual link invalidation must be verified at release. Run the preview first and review its object counts. Do not run it against production as part of local QA.
+
+```sh
+node scripts/revoke-request-photo-links.mjs --project PROJECT_ID --bucket BUCKET_NAME
+# At the approved release, after reviewing the preview:
+node scripts/revoke-request-photo-links.mjs --project PROJECT_ID --bucket BUCKET_NAME --apply
+```
+
+An already downloaded image cannot be recalled from someone's device; revocation prevents further use of the old download link. Production deployment, CORS configuration and token revocation require a separate authorised release. Local tests do not establish their live state.
+
+References: [Firebase authenticated SDK downloads and CORS](https://firebase.google.com/docs/storage/web/download-files#download_data_directly_from_the_sdk), [Storage rules using Firestore](https://firebase.google.com/docs/storage/security/rules-conditions#enhance_with_firestore).

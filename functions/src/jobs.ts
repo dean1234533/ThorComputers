@@ -5,6 +5,7 @@ import { geocode, miles, coarse } from './geo'
 import { p } from './email'
 import { verifyEnquiry } from './wordpress'
 import { DEVICES, METHODS, METHODS_FOR } from './catalog'
+import { stripPrivate } from './privacy'
 import { getFinanceSettings, getMarketplaceSettings } from './external'
 import { advanceLeadDoc, advanceLeadForJob } from './leads'
 
@@ -30,7 +31,7 @@ export async function createRequestFor(customerId: string, d: z.infer<typeof Req
   if (!(await getMarketplaceSettings()).newRequestsEnabled) throw new HttpsError('failed-precondition', 'New repair requests are paused for a short while. Please try again later.')
   const bad = d.serviceMethods.find(m => !METHODS_FOR[d.device.type].includes(m))
   if (bad) throw new HttpsError('invalid-argument', `"${bad}" is not available for this device type.`)
-  if (d.photoPaths.some(x => !x.startsWith(`requests/${customerId}/`))) throw new HttpsError('invalid-argument', 'Invalid photo reference.')
+  if (d.photoPaths.some(x => !x.startsWith(`requests/${customerId}/${d.requestKey}/`) || x.split('/').length !== 4 || !x.split('/')[3])) throw new HttpsError('invalid-argument', 'Invalid photo reference.')
   const jobId = `${customerId}_${d.requestKey}`.slice(0, 120)
   const jobRef = db.doc(`repairRequests/${jobId}`)
   if ((await jobRef.get()).exists) return { jobId, reference: (await jobRef.get()).data()!.reference as string, duplicate: true }
@@ -45,12 +46,15 @@ export async function createRequestFor(customerId: string, d: z.infer<typeof Req
   if (recentCount >= 10) throw new HttpsError('resource-exhausted', 'Daily request limit reached.')
 
   const reference = newRef()
+  // The description is readable by every approved engineer before the customer has chosen anyone. Postcodes, phone numbers, emails and street addresses typed into it are removed from the
+  // public text; the original is kept in the private details, which only the chosen engineer can read once the quote is accepted.
+  const publicText = stripPrivate(d.description), description = publicText.text.length >= 3 ? publicText.text : 'Details are shared with the engineer you choose.'
   const requiredSpecs = requiredSpecsFor(d.device.type, d.issues)
   const batch = db.batch()
   batch.create(jobRef, {
     reference, customerId, status: 'open' as JobStatus, selectedEngineerId: null, acceptedQuoteId: null,
     device: { type: d.device.type, manufacturer: d.device.manufacturer, model: d.device.model, os: d.device.os },
-    issues: d.issues, summary: d.description.slice(0, 140), description: d.description, startedAt: d.startedAt, urgency: d.urgency,
+    issues: d.issues, summary: description.slice(0, 140), description, startedAt: d.startedAt, urgency: d.urgency,
     serviceMethods: d.serviceMethods, requiredSpecs, photoPaths: d.photoPaths, preferredDates: d.preferredDates,
     location: { area: geo.area, outcode: geo.outcode, lat: coarse(geo.lat), lng: coarse(geo.lng) },   // approximate only
     quoteCount: 0, source: d.source, attribution, paymentStatus: 'unpaid', statusHistory: [{ status: 'open', at: Timestamp.now(), by: customerId }],
@@ -58,6 +62,7 @@ export async function createRequestFor(customerId: string, d: z.infer<typeof Req
   })
   batch.create(db.doc(`repairRequests/${jobId}/private/details`), {   // never exposed to bidders
     postcode: d.postcode, addressLine: d.addressLine, accessNotes: d.accessNotes, serialNumber: d.serialNumber, exactLat: geo.lat, exactLng: geo.lng,
+    ...(publicText.removed ? { descriptionOriginal: d.description } : {}),
   })
   await batch.commit()
   await notifyMatchingEngineers(jobId, requiredSpecs, geo, d.device.type, d.urgency)

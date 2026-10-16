@@ -138,11 +138,13 @@ test('intake: vague answers are re-asked, never sent to AI', async () => {
 })
 
 // ---------- account-specific answers ----------
-test('account questions use the caller’s own structured data and only then; other questions never touch it', async () => {
+test('account questions use the caller’s own structured data and only then; other questions never touch it; ambiguous ones ask which repair', async () => {
   const h = harness()
   await h.say('how do refunds work'); await h.say('how do i pay'); assert.equal(h.c.account, 0)
-  const s = await h.say('what is the status of my repair'), a = await h.say('when is my appointment'), p = await h.say('have i paid'), q = await h.say('have i got any quotes')
-  assert.match(s.reply, /THR-AAA: open for quotes, 2 quotes/); assert.match(a.reply, /THR-BBB on .*20 October 2026/); assert.match(p.reply, /THR-BBB: £95\.00 agreed and not paid yet/); assert.match(q.reply, /THR-AAA has 2 quotes/); assert.equal(h.c.account, 4); assert.equal(h.c.ai, 0)
+  const ask = await h.say('what is the status of my repair'); assert.equal(ask.reply, 'Which repair do you mean?'); assert.deepEqual(ask.quick.map(x => x.label), ['THR-AAA (open for quotes)', 'THR-BBB (engineer selected)'])
+  const s = await h.say(ask.quick[0].value, ask.state), a = await h.say('when is my appointment'), p = await h.say('have i paid'), q = await h.say('have i got any quotes')
+  assert.match(s.reply, /^THR-AAA: open for quotes, 2 quotes/); assert.doesNotMatch(s.reply, /THR-BBB/); assert.match(a.reply, /THR-BBB on .*20 October 2026/); assert.match(p.reply, /THR-BBB: £95\.00 agreed and not paid yet/); assert.match(q.reply, /THR-AAA has 2 quotes/); assert.equal(h.c.ai, 0)
+  const unknown = await h.say('what is the status of my repair THR-ZZZZ9'); assert.match(unknown.reply, /can’t find THR-ZZZZ9 on your account/)
 })
 test('a customer with nothing yet is told so and offered a repair; an account provider that fails never leaks details', async () => {
   const none = await harness({ account: async () => ({ jobs: [], nextAppointment: null }) }).say('where is my repair'); assert.match(none.reply, /don’t have any repair requests yet/i)
@@ -215,4 +217,76 @@ test('the conversation state the server returns always passes the schema it is v
     const r = await h.say(m, StateSchema.parse(stripNulls(JSON.parse(JSON.stringify(state)))) as ChatState); state = JSON.parse(JSON.stringify(r.state))   // exactly what the callable does: nulls are stripped, then validated
     const parsed = StateSchema.safeParse(stripNulls(state)); assert.ok(parsed.success, `state after "${m}" rejected: ${JSON.stringify((parsed as any).error?.issues)}`)
   }
+})
+
+
+// ================= regression: the six failures from the latest QA retest =================
+const noAi = (over: Partial<Deps> = {}) => { const c = { ai: 0 }; return { c, h: harness({ ai: async () => { c.ai++; return { answer: 'AI' } }, ...over }) } }
+
+test('QA#2 privacy: a combined intake message is split into separate fields; the public problem has no postcode, method, urgency or lead-in', async () => {
+  const { c, h } = noAi(), r = await h.say('I need a Dell laptop repaired because it will not turn on. Remote assistance, E15 1AA, flexible. QA test only.')
+  assert.equal(r.intent, 'intake_confirm'); assert.equal(r.openForm, false, 'review must not open the form by itself')
+  assert.deepEqual(r.draft, { device: 'laptop', manufacturer: 'Dell', problem: 'It will not turn on. QA test only', serviceMethods: ['remote'], postcode: 'E15 1AA', urgency: 'flexible' })
+  assert.doesNotMatch(r.draft!.problem!, /E15|1AA|remote|flexible|Dell|I need/i); assert.equal(c.ai, 0)
+  const go = await h.say('review and submit', r.state); assert.equal(go.openForm, true); assert.doesNotMatch(go.draft!.problem!, /E15/)
+})
+test('QA#2 privacy: addresses, phone numbers and emails typed into a problem are removed too, and plain one-line problems are left exactly as typed', async () => {
+  const h = harness()
+  for (const [input, want] of [['Hi, my HP Pavilion keeps shutting down, I am at 12 High Street, E15 1AA, call me on 07700 900123', 'My HP Pavilion keeps shutting down'], ['it wont turn on since this morning, email me at pia@example.com', 'It wont turn on since this morning'], ['my laptop keeps switching off', 'my laptop keeps switching off'], ['screen is cracked, battery drains fast, wont charge', 'screen is cracked, battery drains fast, wont charge']] as const) {
+    const r = await h.say(input); assert.equal(r.state.intake?.slots.problem, want, input); assert.doesNotMatch(JSON.stringify(r.state.intake?.slots.problem), /E15|07700|@|High Street/)
+  }
+  const onlySlots = await h.say('Dell laptop. Remote assistance. E15 1AA. Flexible.'); assert.equal(onlySlots.state.intake?.slots.problem, undefined); assert.match(onlySlots.reply, /What’s it doing/)
+})
+test('QA#2 privacy: a postcode typed into the problem step goes to the postcode field, not the description; corrections and restart still work', async () => {
+  const h = harness(), r = await h.run(['my laptop is broken', 'Dell XPS 13', 'workshop', 'N1 9GU', 'soon', 'change problem', 'it will not turn on, my postcode is SW1A 1AA'])
+  assert.equal(r[6].state.intake?.slots.problem, 'It will not turn on'); assert.equal(r[6].state.intake?.slots.postcode, 'SW1A 1AA', 'a postcode typed in the problem step must update the private postcode field')
+  const back = await h.run(['start over', 'laptop'], r[6].state); assert.match(back[0].reply, /start again/i); assert.equal(back[1].state.intake?.slots.problem, undefined)
+})
+
+test('QA#3 pricing: common wording and misspellings reach the pricing FAQ without AI', async () => {
+  const { c, h } = noAi(), wrong: string[] = []
+  for (const q of ['How much do repares cost?', 'how much do you charge for repairs', 'what does a repair cost', 'how much is a screen repiar', 'whats the price of fixing a laptop', 'cost of repair', 'how much to fix my laptop', 'are your prices high', 'what do you charge', 'is it free to get a quote']) { const r = await h.say(q); if (r.intent !== 'prices' || r.source !== 'rules') wrong.push(`${q} -> ${r.intent}/${r.source}`) }
+  assert.deepEqual(wrong, []); assert.equal(c.ai, 0)
+})
+test('QA#3 pricing: the answer uses approved guidance when set, never invents a price, and the matching is not too broad', async () => {
+  assert.match((await harness({ facts: { ...facts, pricingGuidance: 'Most laptop screen quotes are agreed after a free diagnosis.' } }).say('How much do repares cost?')).reply, /Most laptop screen quotes are agreed after a free diagnosis\./)
+  const plain = (await harness().say('How much do repares cost?')).reply; assert.doesNotMatch(plain, /£\s?\d|\d+\s?%/); assert.match(plain, /no fixed price list/i)
+  const h = harness()
+  for (const q of ['How much notice do I need to cancel?', 'how much is the weather in london', 'I need a laptop repaired', 'can i get a refund', 'how do i pay for my repair', 'how much time will it take']) assert.notEqual((await h.say(q)).intent, 'prices', q)
+})
+
+test('QA#4 privacy FAQ: "what can an engineer see about me" is answered by rules, accurately for before and after selection', async () => {
+  const { c, h } = noAi()
+  for (const q of ['What information can an engineer see about me?', 'what can engineers see about me', 'do engineers see my name', 'what personal details do engineers get', 'can the engineer see my phone number', 'will engineers see my address']) {
+    const r = await h.say(q); assert.equal(r.intent, 'privacy_info', q); assert.equal(r.source, 'rules')
+    assert.match(r.reply, /approximate area/); assert.match(r.reply, /photos are private until you choose an engineer/); assert.match(r.reply, /cannot see your name, phone number, email, exact postcode, address or serial number/); assert.match(r.reply, /only that engineer also gets your name, phone, email, exact postcode and address/); assert.match(r.reply, /didn’t choose lose access/)
+  }
+  assert.equal(c.ai, 0)
+})
+
+test('QA#5 payments: "how do I pay" is instructions, never an account payment status; status questions are answered from the caller’s data only', async () => {
+  const { c, h } = noAi(), acct = { n: 0 }
+  const h2 = harness({ account: async () => { acct.n++; return { jobs: [{ reference: 'THR-OLD1', status: 'closed', quoteCount: 1, paid: true, agreedPence: 100 }], nextAppointment: null } } })
+  for (const q of ['How do I pay for my repair?', 'how do i pay', 'where do i pay for my repair', 'how can i pay for the repair', 'how to pay', 'where can i pay']) { const r = await h2.say(q); assert.equal(r.intent, 'payments_how', q); assert.match(r.reply, /Pay securely/); assert.match(r.reply, /payment setup/); assert.match(r.reply, /accepted quote/); assert.doesNotMatch(r.reply, /THR-|paid\./i) }
+  assert.equal(acct.n, 0, 'a how-to question must not read the account'); void c; void h
+  for (const q of ['have i paid for my repair', 'did my payment go through', 'is my repair paid for', 'what is the payment status of my repair']) { const r = await h2.say(q); assert.equal(r.intent, 'acct_payment', q); assert.match(r.reply, /THR-OLD1: paid/) }
+  assert.match((await harness({ facts: { ...facts, requirePaymentBeforeBooking: true } }).say('how do i pay for my repair')).reply, /pay before you can book your appointment/)
+  assert.doesNotMatch((await harness().say('how do i pay for my repair')).reply, /before you can book/)
+})
+test('QA#5 payments: when several repairs could be meant the assistant asks which, then answers for that one only', async () => {
+  const jobs = [{ reference: 'THR-ONE1', status: 'engineer_selected', quoteCount: 1, paid: true, agreedPence: 5000 }, { reference: 'THR-TWO2', status: 'engineer_selected', quoteCount: 1, paid: false, agreedPence: 7000 }]
+  const h = harness({ account: async () => ({ jobs, nextAppointment: null }) }), ask = await h.say('have i paid for my repair')
+  assert.equal(ask.reply, 'Which repair do you mean?'); assert.equal(ask.quick.length, 2)
+  const one = await h.say(ask.quick[1].value, ask.state); assert.match(one.reply, /THR-TWO2: £70\.00 agreed and not paid yet/); assert.doesNotMatch(one.reply, /THR-ONE1/)
+  assert.match((await h.say('have i paid for THR-ONE1')).reply, /^THR-ONE1: paid$/)
+})
+
+test('QA#6 cancellation notice: natural wording reaches the cancellation FAQ and uses the CURRENT platform setting; "cancel" alone still asks which kind', async () => {
+  const { c, h } = noAi(), wrong: string[] = []
+  for (const q of ['How much notice do I need to cancel?', 'what notice do i have to give to cancel an appointment', 'how late can i cancel my appointment', 'notice period for cancelling', 'how far in advance do I need to cancel my booking', 'cancellation notice']) { const r = await h.say(q); if (r.intent !== 'cancel_appointment' || !/24 hours/.test(r.reply)) wrong.push(`${q} -> ${r.intent}`) }
+  assert.deepEqual(wrong, []); assert.equal(c.ai, 0)
+  assert.match((await harness({ facts: { ...facts, booking: { cancelNoticeHours: 48 } } }).say('How much notice do I need to cancel?')).reply, /at least 48 hours/)
+  const none = (await harness({ facts: { ...facts, booking: {} } }).say('How much notice do I need to cancel?')).reply; assert.match(none, /No minimum notice period is set/); assert.doesNotMatch(none, /\d+ hours/)
+  const clar = await harness().say('cancel'); assert.equal(clar.intent, 'clarify'); assert.deepEqual(clar.quick.map(x => x.value).sort(), ['faq:cancel_appointment', 'faq:cancel_repair'])
+  assert.equal((await harness().say('how do i cancel my repair request')).intent, 'cancel_repair'); assert.equal((await harness().say('how do i cancel my appointment')).intent, 'cancel_appointment')
 })

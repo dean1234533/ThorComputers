@@ -45,6 +45,7 @@ const Settings = z.object({
   // Policies of Thor Computer's OWN direct services. Independent engineers' terms come from their own quotes.
   directServicePolicy: z.object({ warranty: z.string().max(1500), terms: z.string().max(1500) }).optional(),
   marketplaceDisclaimer: z.string().max(800).optional(),
+  pricingGuidance: z.string().max(800).optional(),      // approved wording about prices; the assistant quotes it and never invents figures
 })
 export const savePlatformSettings = callable(Settings, async (req, d) => {
   const c = requirePerm(req, 'settings.edit')

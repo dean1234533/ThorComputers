@@ -2,10 +2,11 @@
 // Run with `npm run test:browser` from the repo root. Signs in through the actual UI as each seeded role, visits every route,
 // and records console errors, uncaught exceptions, failed requests and any network traffic that leaves localhost.
 import { spawn, execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, mkdirSync } from 'node:fs'
+import { existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
+import { createRequire } from 'node:module'
 
 const WEB = 'http://127.0.0.1:5173'
 const SHOTS = process.env.SHOT_DIR
@@ -131,9 +132,10 @@ await step('customer completes the request wizard in the UI and the job appears'
     else r.continue()
   })
   await clickText(cust.page, 'Submit request')
-  await cust.page.waitForFunction(() => document.querySelector('[role=alert]')?.textContent.includes('EA1B2C3'), { timeout: 10000 })
+  await cust.page.waitForFunction(() => [...document.querySelectorAll('[role=alert]')].some(e => e.textContent.includes('EA1B2C3')), { timeout: 10000 })
   await sleep(6500)                                   // longer than any toast
-  ok((await cust.page.evaluate(() => document.querySelector('[role=alert]')?.textContent ?? '')).includes('Your request wasn’t sent'), 'error banner disappeared')
+  const persistentAlerts = await cust.page.evaluate(() => [...document.querySelectorAll('[role=alert]')].map(e => e.textContent ?? ''))
+  ok(persistentAlerts.some(t => t.includes('Your request wasn’t sent') && t.includes('EA1B2C3')), `error banner disappeared: ${JSON.stringify(persistentAlerts)}; page: ${(await bodyText(cust.page)).slice(-700)}`)
   ok(!(await bodyText(cust.page)).includes('Request submitted'), 'a failed submission must not look successful')
   const cover = await cust.page.evaluate(() => { const b = [...document.querySelectorAll('button')].find(x => /submit request/i.test(x.textContent)); const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e === b || b.contains(e) ? null : `${e?.tagName}: ${(e?.textContent || '').slice(0, 50)}` })
   ok(!cover, `something covers the Submit button on mobile: ${cover}`)   // regression: the notification prompt used to sit on top of it
@@ -159,6 +161,7 @@ await step('assistant (mobile 390px): guided intake by tapping and typing, no AI
   const draft = JSON.parse(await cust.page.evaluate(() => sessionStorage.getItem('thor.request.draft') ?? '{}'))
   ok(draft.device === 'laptop' && draft.manufacturer === 'HP' && draft.postcode === 'E15 1AA' && draft.urgency === 'urgent' && draft.methods?.includes('home') && /slow/i.test(draft.description), 'the request form was not pre-filled: ' + JSON.stringify(draft))
   ok(!(await bodyText(cust.page)).includes('Request submitted'), 'the assistant must not submit for the customer')
+  ok(!(await cust.page.evaluate(() => !!document.querySelector('[aria-label="Open assistant"]'))), 'the chat button must not sit on top of the request form’s Continue button')
 })
 await step('assistant: FAQ answers, buttons, restart and the support route all work without any AI', async () => {
   await visit(cust, '/customer'); await dismissPrompts(cust.page); await clickText(cust.page, 'Open assistant', 'button'); await sleep(400)
@@ -172,6 +175,56 @@ await step('assistant (desktop 1280px): panel sits inside the window and the pag
 })
 await step('customer signs out cleanly (mobile: via the More sheet)', async () => { await clickText(cust.page, 'More'); await sleep(600); await clickText(cust.page, 'Sign out'); await cust.page.waitForFunction(() => location.pathname === '/login', { timeout: 10000 }) })
 
+
+console.log('\nLayout: repair page with booking strip, payment panel and progress sidebar')
+const adminRequire = createRequire(new URL('../functions/', import.meta.url)); process.env.GCLOUD_PROJECT = 'demo-thor'
+const { initializeApp: adminInit } = adminRequire('firebase-admin/app'), { getAuth: adminAuth } = adminRequire('firebase-admin/auth'), { getFirestore: adminDb, FieldValue: FV, Timestamp: TS } = adminRequire('firebase-admin/firestore')
+const layoutApp = adminInit({ projectId: 'demo-thor' }, 'layout')
+const layoutCustomer = await adminAuth(layoutApp).getUserByEmail('customer@demo.test')
+const LAYOUT_JOB = `${layoutCustomer.uid}_layout-photo`
+const LAYOUT_PHOTO = `requests/${layoutCustomer.uid}/layout-photo/photo.png`
+await step('set up a repair in the "engineer selected" state (booking strip + unpaid payment + progress sidebar)', async () => {
+  const au = adminAuth(layoutApp), db = adminDb(layoutApp), c = await au.getUserByEmail('customer@demo.test'), e = await au.getUserByEmail('engineer@demo.test'), qid = `${LAYOUT_JOB}_${e.uid}`
+  await db.doc(`repairRequests/${LAYOUT_JOB}`).set({ reference: 'THR-LAYOUT1', customerId: c.uid, status: 'engineer_selected', selectedEngineerId: e.uid, acceptedQuoteId: qid, agreedTotalPence: 11500, agreedMethod: 'workshop', commissionBps: 1500, paymentStatus: 'unpaid', provider: 'independent',
+    device: { type: 'laptop', manufacturer: 'Dell', model: 'XPS 13', os: '' }, issues: [], summary: 'Layout fixture', description: 'Layout test fixture: a repair waiting to be paid and booked.', urgency: 'flexible', serviceMethods: ['workshop'], requiredSpecs: ['laptop'], photoPaths: [LAYOUT_PHOTO], preferredDates: [],
+    location: { area: 'Bromley · BR1', outcode: 'BR1', lat: 51.4, lng: 0 }, quoteCount: 1, source: 'app', statusHistory: [{ status: 'engineer_selected', at: TS.now(), by: c.uid }], createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp() })
+  await adminRequire('firebase-admin/storage').getStorage(layoutApp).bucket('demo-thor.appspot.com').file(LAYOUT_PHOTO).save(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=', 'base64'), { contentType: 'image/png' })
+  await db.doc(`repairRequests/${LAYOUT_JOB}/private/details`).set({ postcode: 'BR1 1AA', addressLine: '', accessNotes: '', serialNumber: '' })
+  await db.doc(`repairQuotes/${qid}`).set({ jobId: LAYOUT_JOB, engineerId: e.uid, customerId: c.uid, repairPence: 8000, diagnosticPence: 1500, calloutPence: 2000, totalPence: 11500, currency: 'GBP', durationHours: 1, availability: 'This week', partsIncluded: false, partsNote: '', warranty: '30 days', notes: '', serviceMethod: 'workshop', provider: 'independent', status: 'accepted', version: 1, expiresAt: TS.fromMillis(Date.now() + 7 * 86400000), createdAt: FV.serverTimestamp(), updatedAt: FV.serverTimestamp() })
+})
+const lay = await newSession('layout', true)
+await login(lay, 'customer@demo.test')
+const measure = page => page.evaluate(() => {
+  const vw = innerWidth, aside = document.querySelector('#main-content aside'), pay = [...document.querySelectorAll('button')].find(b => /pay securely/i.test(b.textContent)), strip = document.querySelector('[role=listbox][aria-label="Choose a day"]')
+  const rect = el => { if (!el) return null; const r = el.getBoundingClientRect(); return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), w: Math.round(r.width) } }
+  const wide = [...document.querySelectorAll('body *')].filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.right > vw + 1 && !el.closest('[role=listbox]') && getComputedStyle(el).position !== 'fixed' }).slice(0, 5).map(el => `${el.tagName}.${String(el.className).slice(0, 50)}`)
+  const pr = pay?.getBoundingClientRect(), hit = pr && document.elementFromPoint(pr.x + pr.width / 2, pr.y + pr.height / 2)
+  return { vw, vh: innerHeight, payHit: !!pay && (hit === pay || pay.contains(hit)), scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, aside: rect(aside), pay: rect(pay), strip: strip ? { client: strip.clientWidth, scroll: strip.scrollWidth, ...rect(strip) } : null, wide }
+})
+for (const [label, mobile, width] of [['mobile 390px', true, 390], ['desktop 1280px', false, 1280]]) {
+  await step(`repair page at ${label}: no sideways page scroll, day strip scrolls inside itself, payment action and progress sidebar fully inside the window`, async () => {
+    await lay.page.setViewport(mobile ? { width, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { width, height: 800 })
+    await lay.page.goto(`${WEB}/customer/repairs/${LAYOUT_JOB}`, { waitUntil: 'domcontentloaded' }); await settle(lay.page, 2500); await dismissPrompts(lay.page)
+    await lay.page.waitForFunction(() => document.querySelector('[role=listbox][aria-label="Choose a day"]'), { timeout: 10000 })
+    await lay.page.waitForFunction(() => [...document.querySelectorAll('img[src^="blob:"]')].some(i => i.complete && i.naturalWidth > 0), { timeout: 10000 })
+    if (SHOTS) await lay.page.screenshot({ path: join(SHOTS, `layout-repair-${width}.png`), fullPage: true })
+    await lay.page.evaluate(() => [...document.querySelectorAll('button')].find(b => /pay securely/i.test(b.textContent))?.scrollIntoView({ block: 'center' }))
+    const m = await measure(lay.page); lay.measures = { ...(lay.measures ?? {}), [width]: m }
+    ok(m.scrollWidth <= m.clientWidth + 1, `page scrolls sideways: scrollWidth ${m.scrollWidth} vs clientWidth ${m.clientWidth}; widest: ${m.wide.join(', ')}`)
+    ok(m.strip && m.strip.right <= m.vw + 1 && m.strip.scroll > m.strip.client, `the day strip must fit the screen and scroll inside itself: ${JSON.stringify(m.strip)}`)
+    ok(m.pay && m.pay.left >= 0 && m.pay.right <= m.vw && m.pay.w > 80, `Pay securely is not fully visible: ${JSON.stringify(m.pay)}`)
+    ok(m.payHit && m.pay.top >= 0 && m.pay.bottom <= m.vh, `payment action is covered: ${JSON.stringify(m.pay)}`)
+    ok(m.aside && m.aside.w > 0 && m.aside.left >= 0 && m.aside.right <= m.vw, `progress sidebar is clipped: ${JSON.stringify(m.aside)}`)
+  })
+  await step(`chat assistant stays inside the window on the repair page at ${label}, and its controls remain usable`, async () => {
+    await clickText(lay.page, 'Open assistant', 'button'); await sleep(500); const r = await panelRect(lay.page)
+    ok(r && r.left >= 0 && r.right <= r.vw && r.top >= 0 && r.bottom <= r.vh && r.sw <= r.vw + 1, `chat panel outside the window: ${JSON.stringify(r)}`)
+    await lay.page.type('input[aria-label=Message]', 'how do i pay'); await lay.page.keyboard.press('Enter'); await lay.page.waitForFunction(() => { const panel = document.querySelector('[role=dialog][aria-label="Thor Computer assistant"]'); return panel && /Stripe/.test(panel.innerText) && !/Working on it|Still working on it/.test(panel.innerText) }, { timeout: 10000 })
+    if (SHOTS) await lay.page.screenshot({ path: join(SHOTS, `layout-chat-${width}.png`) })
+    await clickText(lay.page, 'Close assistant', 'button')
+  })
+}
+if (SHOTS) writeFileSync(join(SHOTS, 'layout-measurements.json'), JSON.stringify(lay.measures, null, 2))
 console.log('\nEngineer')
 const eng = await newSession('engineer')
 await step('approved engineer signs in and lands on /engineer', async () => { await login(eng, 'engineer@demo.test'); ok(new URL(eng.page.url()).pathname === '/engineer', eng.page.url()) })
@@ -180,6 +233,17 @@ for (const p of ['/engineer', '/engineer/jobs', '/engineer/quotations', '/engine
 await step('engineer sees the open job but NOT the exact address or serial', async () => {
   await visit(eng, '/engineer/jobs/demo-job-open'); const t = await bodyText(eng.page)
   ok(/XPS 13|laptop/i.test(t), 'job not shown'); ok(!/1 Demo Road|DEMO123/.test(t), 'exact address or serial leaked to a bidding engineer')
+})
+await step('request photos: bidders see a privacy notice; selected engineers receive authenticated image blobs', async () => {
+  const db = adminDb(layoutApp), engineer = await adminAuth(layoutApp).getUserByEmail('engineer@demo.test')
+  await db.doc(`repairRequests/${LAYOUT_JOB}`).update({ status: 'open', selectedEngineerId: null })
+  await visit(eng, `/engineer/jobs/${LAYOUT_JOB}`, { mustContain: 'The customer has attached photos' })
+  ok(await eng.page.evaluate(() => !document.querySelector('img[src^="blob:"]')), 'bidder received photo bytes')
+  if (SHOTS) await eng.page.screenshot({ path: join(SHOTS, 'photos-bidder-private.png') })
+  await db.doc(`repairRequests/${LAYOUT_JOB}`).update({ status: 'engineer_selected', selectedEngineerId: engineer.uid })
+  await eng.page.goto(`${WEB}/engineer/my-jobs/${LAYOUT_JOB}`, { waitUntil: 'domcontentloaded' })
+  await eng.page.waitForFunction(() => [...document.querySelectorAll('img[src^="blob:"]')].some(i => i.complete && i.naturalWidth > 0), { timeout: 10000 })
+  if (SHOTS) await eng.page.screenshot({ path: join(SHOTS, 'photos-selected-visible.png') })
 })
 await step('engineer is bounced from customer/admin areas', async () => { await visit(eng, '/customer', { expectPath: '/engineer' }); await visit(eng, '/admin/settings', { expectPath: '/engineer' }) })
 const pend = await newSession('pending-engineer')

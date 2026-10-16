@@ -20,10 +20,19 @@ service firebase.storage {
       allow update, delete: if false;
     }
 
-    // Device photos: customer uploads; owner, admins and approved engineers can view (no PII expected in photos; UI warns).
-    match /requests/{userId}/{jobId}/{file} {
+    // Upload folders use the request's idempotency key; the server prefixes it with the customer uid.
+    function selectedForPhoto(userId, requestKey, file) {
+      let id = userId + '_' + requestKey;
+      let job = firestore.get(/databases/(default)/documents/repairRequests/$(id)).data;
+      return request.auth.token.role == 'engineer' && request.auth.token.engineerApproved == true
+        && job.customerId == userId && job.selectedEngineerId == request.auth.uid
+        && ('requests/' + userId + '/' + requestKey + '/' + file) in job.photoPaths;
+    }
+    // Photos may contain personal details. Approval alone never grants access to someone else's photos.
+    match /requests/{userId}/{requestKey}/{file} {
       allow create: if resource == null && signedIn() && request.auth.uid == userId && request.auth.token.suspended != true && isImage();
-      allow read: if signedIn() && (request.auth.uid == userId || isAdmin() || request.auth.token.engineerApproved == true);
+      allow read: if signedIn() && request.auth.token.suspended != true
+        && (request.auth.uid == userId || (isAdmin() && 'jobs.manage' in request.auth.token.perms) || selectedForPhoto(userId, requestKey, file));
       allow update, delete: if false;
     }
 
