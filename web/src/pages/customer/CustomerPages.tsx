@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { limit, orderBy, where } from 'firebase/firestore'
 import { Plus, Wrench, FileText, ChevronRight, ArrowUpRight, ArrowRight, ShieldCheck, Clock3, CheckCircle2, CalendarDays } from 'lucide-react'
@@ -9,8 +10,9 @@ import { engName, Quote } from '@/components/QuoteCompare'
 import type { Job } from './RepairDetail'
 import { gbp } from '@/types/domain'
 import DeviceCareVisual from '@/components/DeviceCareVisual'
+import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
-const useMyJobs = (n = 50) => { const { user } = useAuth(); return useQuery<Job>('repairRequests', () => [where('customerId', '==', user!.uid), orderBy('createdAt', 'desc'), limit(n)], [user?.uid, n]) }
+const useMyJobs = (n = 50, range: DateRange = ALL_TIME) => { const { user } = useAuth(); return useQuery<Job>('repairRequests', () => [where('customerId', '==', user!.uid), ...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(n)], [user?.uid, n, rangeKey(range)]) }
 
 function JobRow({ j }: { j: Job & { id: string } }) {
   return (
@@ -56,9 +58,9 @@ export function CustomerHome() {
 }
 
 export function MyRepairs() {
-  const jobs = useMyJobs()
+  const [range, setRange] = useState<DateRange>(ALL_TIME); const jobs = useMyJobs(50, range)
   return (
-    <div><PageHeader title="My Repairs" action={<Link to="/customer/new-request"><Button size="sm"><Plus className="size-4" />New</Button></Link>} />
+    <div><PageHeader title="My Repairs" action={<Link to="/customer/new-request"><Button size="sm"><Plus className="size-4" />New</Button></Link>} /><DateFilter value={range} onChange={setRange} />
       {jobs.loading ? <ListSkeleton /> : jobs.data.length === 0 ? <EmptyState icon={Wrench} title="No repairs yet" body="Submit your first request and engineers near you will send quotes." action={<Link to="/customer/new-request"><Button>Start a request</Button></Link>} /> : <ul className="space-y-3">{jobs.data.map(j => <JobRow key={j.id} j={j} />)}</ul>}</div>)
 }
 

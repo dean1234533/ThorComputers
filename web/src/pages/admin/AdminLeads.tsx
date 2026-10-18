@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Select, Sheet, Textarea, useToast } from '@/components/ui'
+import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 interface Lead {
   status: string; statusNote?: string; platform?: 'facebook' | 'instagram'; campaignId?: string | null; campaignName?: string | null; adName?: string | null; formId?: string | null
@@ -20,7 +21,8 @@ const FIELDS: [string, string][] = [['name', 'Name'], ['email', 'Email'], ['phon
 
 export default function AdminLeads() {
   const { can } = useAuth()
-  const { data, loading, error } = useQuery<Lead>(can('marketing.manage') ? 'metaLeads' : null, () => [orderBy('createdAt', 'desc'), limit(300)], [])
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const { data, loading, error } = useQuery<Lead>(can('marketing.manage') ? 'metaLeads' : null, () => [...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(300)], [rangeKey(range)])
   const [status, setStatus] = useState(''), [platform, setPlatform] = useState(''), [q, setQ] = useState(''), [open, setOpen] = useState<string | null>(null)
   const rows = useMemo(() => data.filter(l => (!status || l.status === status) && (!platform || l.platform === platform) &&
     (!q || [l.mapped?.name, l.mapped?.email, l.campaignName, l.mapped?.problem, l.id].some(v => v?.toLowerCase().includes(q.toLowerCase())))), [data, status, platform, q])
@@ -28,6 +30,7 @@ export default function AdminLeads() {
   const lead = data.find(l => l.id === open)
   return (
     <div><PageHeader title="Incoming Leads" sub="Facebook and Instagram enquiries, from advert to repair job." />
+      <DateFilter value={range} onChange={setRange} />
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         <Input label="Search" placeholder="Name, email, campaign…" value={q} onChange={e => setQ(e.target.value)} />
         <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All</option>{Object.entries(LEAD_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>

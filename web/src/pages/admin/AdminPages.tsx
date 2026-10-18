@@ -8,6 +8,7 @@ import { useQuery, WithId } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Select, Sheet, Stars, StatusPill, Textarea, Input, useToast } from '@/components/ui'
 import { gbp, JobStatus, SPECIALISATIONS } from '@/types/domain'
+import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 // ---------- shared helpers ----------
 function PermGate({ perm, children }: { perm: string; children: ReactNode }) {
@@ -61,9 +62,9 @@ function ReviewApplication({ app, onClose }: { app: WithId<App>; onClose: () => 
 // ---------- users ----------
 interface U { fullName: string; email: string; status: string; role: string; createdAt?: { toDate(): Date } }
 function UserList({ role, title, perm }: { role: 'customer' | 'engineer'; title: string; perm: string }) {
-  const toast = useToast(); const u = useQuery<U>('users', () => [where('role', '==', role), orderBy('createdAt', 'desc'), limit(100)], [role]); const [target, setTarget] = useState<WithId<U> | null>(null)
+  const toast = useToast(); const [range, setRange] = useState<DateRange>(ALL_TIME); const u = useQuery<U>('users', () => [where('role', '==', role), ...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(100)], [role, rangeKey(range)]); const [target, setTarget] = useState<WithId<U> | null>(null)
   return (
-    <PermGate perm={perm}><div><PageHeader title={title} />{u.loading ? <ListSkeleton /> : u.data.length === 0 ? <EmptyState icon={Users} title="No accounts yet" body="They’ll appear here as people register." /> :
+    <PermGate perm={perm}><div><PageHeader title={title} /><DateFilter label="Joined" value={range} onChange={setRange} />{u.loading ? <ListSkeleton /> : u.data.length === 0 ? <EmptyState icon={Users} title="No accounts yet" body="They’ll appear here as people register." /> :
       <ul className="divide-y divide-ink/8 surface px-5">{u.data.map(x => <li key={x.id} className="flex items-center gap-3 py-3"><div className="min-w-0 flex-1"><p className="truncate font-medium">{x.fullName}</p><p className="truncate text-xs text-thor-text">{x.email} · joined {day(x.createdAt)}</p></div><Badge tone={x.status === 'active' ? 'ok' : 'bad'}>{x.status}</Badge><Button size="sm" variant="ghost" onClick={() => setTarget(x)}>{x.status === 'suspended' ? 'Reinstate' : 'Suspend'}</Button></li>)}</ul>}
       {target && <NoteSheet open title={`${target.status === 'suspended' ? 'Reinstate' : 'Suspend'} ${target.fullName}`} action="Confirm" danger={target.status !== 'suspended'} onClose={() => setTarget(null)} onSubmit={async note => { try { await api.setAccountSuspended({ userId: target.id, suspended: target.status !== 'suspended', reason: note }); toast('ok', 'Done.') } catch (e) { toast('bad', errMsg(e)); throw e } }} />}</div></PermGate>)
 }
@@ -72,22 +73,24 @@ export const AdminEngineers = () => <UserList role="engineer" title="Engineers" 
 
 // ---------- jobs, quotes, appointments ----------
 export function AdminJobs() {
-  const toast = useToast(); const [st, setSt] = useState('')
-  const j = useQuery<{ reference: string; status: JobStatus; device: { manufacturer: string; model: string }; location: { area: string }; quoteCount: number; createdAt?: { toDate(): Date } }>('repairRequests', () => { const c: QueryConstraint[] = []; if (st) c.push(where('status', '==', st)); c.push(orderBy('createdAt', 'desc'), limit(100)); return c }, [st])
+  const toast = useToast(); const [st, setSt] = useState(''); const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const j = useQuery<{ reference: string; status: JobStatus; device: { manufacturer: string; model: string }; location: { area: string }; quoteCount: number; createdAt?: { toDate(): Date } }>('repairRequests', () => { const c: QueryConstraint[] = []; if (st) c.push(where('status', '==', st)); c.push(...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(100)); return c }, [st, rangeKey(range)])
   const [target, setTarget] = useState<{ id: string; to: string } | null>(null)
   return (
-    <PermGate perm="jobs.manage"><div><PageHeader title="Repair Requests" action={<div className="w-48"><Select label="" aria-label="Status filter" value={st} onChange={e => setSt(e.target.value)}><option value="">All statuses</option>{['open', 'engineer_selected', 'appointment_scheduled', 'in_progress', 'completed', 'closed', 'cancelled', 'disputed'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</Select></div>} />
+    <PermGate perm="jobs.manage"><div><PageHeader title="Repair Requests" action={<div className="w-48"><Select label="" aria-label="Status filter" value={st} onChange={e => setSt(e.target.value)}><option value="">All statuses</option>{['open', 'engineer_selected', 'appointment_scheduled', 'in_progress', 'completed', 'closed', 'cancelled', 'disputed'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</Select></div>} /><DateFilter value={range} onChange={setRange} />
       {j.loading ? <ListSkeleton /> : j.data.length === 0 ? <EmptyState icon={Wrench} title="No requests" body="Nothing matches this filter." /> : <ul className="space-y-2">{j.data.map(x => <li key={x.id} className="flex items-center gap-3 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.reference} · {x.device.manufacturer} {x.device.model}</p><p className="text-xs text-thor-text">{x.location.area} · {x.quoteCount} quotes · {day(x.createdAt)}</p></div><StatusPill status={x.status} />
         {x.status === 'disputed' && <Button size="sm" variant="soft" onClick={() => setTarget({ id: x.id, to: 'closed' })}>Resolve</Button>}{['open', 'engineer_selected', 'appointment_scheduled'].includes(x.status) && <Button size="sm" variant="ghost" className="text-bad" onClick={() => setTarget({ id: x.id, to: 'cancelled' })}>Cancel</Button>}</li>)}</ul>}
       {target && <NoteSheet open title={target.to === 'closed' ? 'Resolve dispute' : 'Cancel request'} action="Confirm" onClose={() => setTarget(null)} onSubmit={async note => { try { await api.changeJobStatus({ jobId: target.id, to: target.to, note }); toast('ok', 'Updated.') } catch (e) { toast('bad', errMsg(e)); throw e } }} />}</div></PermGate>)
 }
 export function AdminQuotations() {
-  const q = useQuery<{ jobId: string; engineerId: string; totalPence: number; status: string; createdAt?: { toDate(): Date } }>('repairQuotes', () => [orderBy('createdAt', 'desc'), limit(100)], [])
-  return <PermGate perm="jobs.manage"><div><PageHeader title="Quotations" />{q.loading ? <ListSkeleton /> : <Table head={['Job', 'Engineer', 'Total', 'Status', 'Sent']} rows={q.data.map(x => [x.jobId.slice(-8), x.engineerId.slice(0, 8), gbp(x.totalPence), <Badge key="s" tone={x.status === 'accepted' ? 'ok' : x.status === 'submitted' ? 'info' : 'neutral'}>{x.status}</Badge>, day(x.createdAt)])} />}</div></PermGate>
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const q = useQuery<{ jobId: string; engineerId: string; totalPence: number; status: string; createdAt?: { toDate(): Date } }>('repairQuotes', () => [...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(100)], [rangeKey(range)])
+  return <PermGate perm="jobs.manage"><div><PageHeader title="Quotations" /><DateFilter value={range} onChange={setRange} />{q.loading ? <ListSkeleton /> : <Table head={['Job', 'Engineer', 'Total', 'Status', 'Sent']} rows={q.data.map(x => [x.jobId.slice(-8), x.engineerId.slice(0, 8), gbp(x.totalPence), <Badge key="s" tone={x.status === 'accepted' ? 'ok' : x.status === 'submitted' ? 'info' : 'neutral'}>{x.status}</Badge>, day(x.createdAt)])} />}</div></PermGate>
 }
 export function AdminAppointments() {
-  const a = useQuery<{ reference: string; status: string; method: string; startAt: { toDate(): Date } }>('appointments', () => [orderBy('startAt', 'desc'), limit(100)], [])
-  return <PermGate perm="jobs.manage"><div><PageHeader title="Appointments" />{a.loading ? <ListSkeleton /> : <Table head={['Reference', 'When', 'Method', 'Status']} rows={a.data.map(x => [x.reference, x.startAt.toDate().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }), x.method, <Badge key="s" tone={x.status === 'confirmed' ? 'ok' : x.status === 'cancelled' ? 'bad' : 'warn'}>{x.status}</Badge>])} />}</div></PermGate>
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const a = useQuery<{ reference: string; status: string; method: string; startAt: { toDate(): Date } }>('appointments', () => [...dateConstraints('startAt', range), orderBy('startAt', 'desc'), limit(100)], [rangeKey(range)])
+  return <PermGate perm="jobs.manage"><div><PageHeader title="Appointments" /><DateFilter label="Appointment date" value={range} onChange={setRange} />{a.loading ? <ListSkeleton /> : <Table head={['Reference', 'When', 'Method', 'Status']} rows={a.data.map(x => [x.reference, x.startAt.toDate().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }), x.method, <Badge key="s" tone={x.status === 'confirmed' ? 'ok' : x.status === 'cancelled' ? 'bad' : 'warn'}>{x.status}</Badge>])} />}</div></PermGate>
 }
 function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   return rows.length === 0 ? <EmptyState icon={ClipboardList} title="Nothing to show" body="No records yet." /> : <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-ink/5"><table className="w-full min-w-[32rem] text-sm"><thead className="text-left text-thor-text"><tr>{head.map(h => <th key={h} className="p-3 font-medium">{h}</th>)}</tr></thead><tbody className="divide-y divide-ink/8">{rows.map((r, i) => <tr key={i}>{r.map((c, j) => <td key={j} className="p-3">{c}</td>)}</tr>)}</tbody></table></div>

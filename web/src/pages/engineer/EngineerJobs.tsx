@@ -12,6 +12,7 @@ import { StorageImg } from '@/components/StorageImg'
 import { Quote } from '@/components/QuoteCompare'
 import { DEVICE_TYPES, SERVICE_METHODS, gbp, JobStatus, ENGINEER_NEXT, JOB_STATUS_LABEL } from '@/types/domain'
 import ReviewSheet from '@/components/ReviewSheet'
+import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 interface Job { reference: string; status: JobStatus; device: { type: string; manufacturer: string; model: string }; summary: string; description: string; issues: string[]; urgency: 'flexible' | 'soon' | 'urgent'; serviceMethods: string[]; location: { area: string; lat: number; lng: number }; photoPaths: string[]; quoteCount: number; createdAt?: { toDate(): Date }; selectedEngineerId?: string; acceptedQuoteId?: string; customerId: string; agreedTotalPence?: number; agreedMethod?: string }
 const age = (d?: Date) => { if (!d) return ''; const h = (Date.now() - d.getTime()) / 3600_000; return h < 1 ? 'Just now' : h < 24 ? `${Math.floor(h)}h ago` : `${Math.floor(h / 24)}d ago` }
@@ -99,19 +100,21 @@ export function JobDetail() {
 
 export function MyQuotations() {
   const { user } = useAuth()
-  const q = useQuery<Quote>('repairQuotes', () => [where('engineerId', '==', user!.uid), orderBy('createdAt', 'desc'), limit(50)], [user!.uid])
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const q = useQuery<Quote>('repairQuotes', () => [where('engineerId', '==', user!.uid), ...dateConstraints('createdAt', range), orderBy('createdAt', 'desc'), limit(50)], [user!.uid, rangeKey(range)])
   const tone = { submitted: 'info', accepted: 'ok', declined: 'bad', withdrawn: 'neutral', expired: 'neutral' } as const
   return (
-    <div><PageHeader title="My Quotations" />
+    <div><PageHeader title="My Quotations" /><DateFilter value={range} onChange={setRange} />
       {q.loading ? <ListSkeleton /> : q.data.length === 0 ? <EmptyState icon={Search} title="No quotations yet" body="Find a job that suits you and send your first quote." action={<Link to="/engineer/jobs"><Button>Browse jobs</Button></Link>} /> :
         <ul className="space-y-3">{q.data.map(x => <li key={x.id}><Link to={x.status === 'accepted' ? `/engineer/my-jobs/${x.jobId}` : `/engineer/jobs/${x.jobId}`} className="flex items-center gap-4 surface p-5"><div className="flex-1"><p className="font-display text-xl text-thor-blue">{gbp(x.totalPence)}</p><p className="text-sm text-thor-text">{x.durationHours}h · {x.availability}</p></div><Badge tone={tone[x.status as keyof typeof tone] ?? 'neutral'}>{x.status}</Badge></Link></li>)}</ul>}</div>)
 }
 
 export function MyJobs() {
   const { user } = useAuth()
-  const j = useQuery<Job>('repairRequests', () => [where('selectedEngineerId', '==', user!.uid), orderBy('updatedAt', 'desc'), limit(50)], [user!.uid])
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const j = useQuery<Job>('repairRequests', () => [where('selectedEngineerId', '==', user!.uid), ...dateConstraints('updatedAt', range), orderBy('updatedAt', 'desc'), limit(50)], [user!.uid, rangeKey(range)])
   return (
-    <div><PageHeader title="My Jobs" />
+    <div><PageHeader title="My Jobs" /><DateFilter value={range} onChange={setRange} />
       {j.loading ? <ListSkeleton /> : j.data.length === 0 ? <EmptyState icon={Search} title="No jobs yet" body="Jobs appear here when a customer accepts your quote." /> :
         <ul className="space-y-3">{j.data.map(x => <li key={x.id}><Link to={`/engineer/my-jobs/${x.id}`} className="flex items-center gap-4 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.device.manufacturer} {x.device.model}</p><p className="truncate text-sm text-thor-text">{x.reference} · {x.location.area}</p></div><StatusPill status={x.status} /></Link></li>)}</ul>}</div>)
 }

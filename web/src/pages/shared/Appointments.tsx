@@ -6,6 +6,7 @@ import { useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Sheet, useToast, Input } from '@/components/ui'
 import { SERVICE_METHODS } from '@/types/domain'
+import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 interface Apt { jobId: string; reference: string; customerId: string; engineerId: string; startAt: { toDate(): Date }; durationMinutes: number; status: string; method: string; pendingReschedule?: { by: string; startAt: { toDate(): Date } } | null }
 const fmt = (d: Date) => d.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })
@@ -13,7 +14,8 @@ const fmt = (d: Date) => d.toLocaleString('en-GB', { weekday: 'long', day: 'nume
 export default function Appointments() {
   const { user, role } = useAuth(); const toast = useToast()
   const f = role === 'engineer' ? 'engineerId' : 'customerId'
-  const apts = useQuery<Apt>('appointments', () => [where(f, '==', user!.uid), orderBy('startAt', 'desc'), limit(40)], [user?.uid, f])
+  const [range, setRange] = useState<DateRange>(ALL_TIME)
+  const apts = useQuery<Apt>('appointments', () => [where(f, '==', user!.uid), ...dateConstraints('startAt', range), orderBy('startAt', 'desc'), limit(40)], [user?.uid, f, rangeKey(range)])
   const [busy, setBusy] = useState(''); const [resched, setResched] = useState<string | null>(null); const [when, setWhen] = useState('')
   const run = async (key: string, fn: () => Promise<unknown>, ok: string) => { setBusy(key); try { await fn(); toast('ok', ok) } catch (e) { toast('bad', errMsg(e)) } finally { setBusy('') } }
   const now = Date.now()
@@ -32,7 +34,7 @@ export default function Appointments() {
         </div></li>)
   }
   return (
-    <div><PageHeader title="Appointments" />
+    <div><PageHeader title="Appointments" /><DateFilter label="Appointment date" value={range} onChange={setRange} />
       {apts.loading ? <ListSkeleton /> : apts.data.length === 0 ? <EmptyState icon={CalendarDays} title="No appointments" body={role === 'engineer' ? 'Bookings from customers will appear here.' : 'Once you select an engineer you can book a time.'} /> : <>
         {upcoming.length > 0 && <ul className="space-y-3">{upcoming.map(a => <Card key={a.id} a={a} />)}</ul>}
         {past.length > 0 && <><h2 className="mb-3 mt-8 font-display text-lg text-thor-text">Past and cancelled</h2><ul className="space-y-3 opacity-80">{past.map(a => <Card key={a.id} a={a} />)}</ul></>}</>}
