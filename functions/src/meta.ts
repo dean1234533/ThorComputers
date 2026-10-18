@@ -92,21 +92,35 @@ export const metaOAuthCallback = onRequest({ region: REGION, cors: false, secret
 
     const short = await graph('/oauth/access_token', { params: { client_id: process.env.META_APP_ID ?? 'mock', redirect_uri: redirectUri(), client_secret: appSecret(), code } })
     const long = await graph('/oauth/access_token', { params: { grant_type: 'fb_exchange_token', client_id: process.env.META_APP_ID ?? 'mock', client_secret: appSecret(), fb_exchange_token: short.access_token } })
-    const token = long.access_token as string
-    const [me, pages, adAccounts] = await Promise.all([graph('/me', { token, params: { fields: 'id,name' } }), graph('/me/accounts', { token, params: { fields: 'id,name,access_token', limit: '100' } }), graph('/me/adaccounts', { token, params: { fields: 'id,name,currency,account_status', limit: '100' } })])
-    const subscribed: string[] = []
-    for (const pg of pages.data as { id: string; name: string; access_token: string }[]) {
-      try { await graph(`/${pg.id}/subscribed_apps`, { method: 'POST', token: pg.access_token, params: { subscribed_fields: 'leadgen' } }); subscribed.push(pg.id) } catch (e: any) { console.warn('leadgen subscribe failed', pg.id, e.message) }
-    }
-    await db.doc('metaConnections/main').set({ userId: me.id, tokenEnc: encryptToken(token, appSecret()), expiresAt: long.expires_in ? Timestamp.fromMillis(Date.now() + long.expires_in * 1000) : null,
-      pages: (pages.data as any[]).map(pg => ({ id: pg.id, tokenEnc: encryptToken(pg.access_token, appSecret()) })), connectedBy: st.uid, connectedAt: FieldValue.serverTimestamp() })
-    await db.doc('metaAssets/main').set({ status: 'connected', statusReason: '', metaUserName: me.name, connectedBy: st.uid, scopes: META_SCOPES, subscribedPages: subscribed,
-      pages: (pages.data as any[]).map(pg => ({ id: pg.id, name: pg.name })), adAccounts: (adAccounts.data as any[]).map(a => ({ id: a.id, name: a.name, currency: a.currency, active: a.account_status === 1 })), updatedAt: FieldValue.serverTimestamp() })
-    await audit(st.uid, 'meta.connect', 'metaConnections/main', { pages: pages.data.length, adAccounts: adAccounts.data.length })
-    await health('meta', true, 'connected')
+    await saveConnection(long.access_token as string, st.uid, long.expires_in ?? null, 'oauth')
     back('meta=connected')
   } catch (e: any) { console.error('meta oauth failed', e.message); back('meta=failed') }
 })
+
+/** Stores a working Meta token and imports the Pages / ad accounts it can see. Used by both the Facebook login flow and a pasted Business (system user) token. */
+async function saveConnection(token: string, uid: string, expiresIn: number | null, via: 'oauth' | 'system_user') {
+  const [me, pages, adAccounts] = await Promise.all([graph('/me', { token, params: { fields: 'id,name' } }), graph('/me/accounts', { token, params: { fields: 'id,name,access_token', limit: '100' } }), graph('/me/adaccounts', { token, params: { fields: 'id,name,currency,account_status', limit: '100' } })])
+  const subscribed: string[] = []
+  for (const pg of pages.data as { id: string; name: string; access_token: string }[]) {
+    try { await graph(`/${pg.id}/subscribed_apps`, { method: 'POST', token: pg.access_token, params: { subscribed_fields: 'leadgen' } }); subscribed.push(pg.id) } catch (e: any) { console.warn('leadgen subscribe failed', pg.id, e.message) }
+  }
+  await db.doc('metaConnections/main').set({ userId: me.id, via, tokenEnc: encryptToken(token, appSecret()), expiresAt: expiresIn ? Timestamp.fromMillis(Date.now() + expiresIn * 1000) : null,
+    pages: (pages.data as any[]).map(pg => ({ id: pg.id, tokenEnc: encryptToken(pg.access_token, appSecret()) })), connectedBy: uid, connectedAt: FieldValue.serverTimestamp() })
+  await db.doc('metaAssets/main').set({ status: 'connected', statusReason: '', via, metaUserName: me.name, connectedBy: uid, scopes: META_SCOPES, subscribedPages: subscribed,
+    pages: (pages.data as any[]).map(pg => ({ id: pg.id, name: pg.name })), adAccounts: (adAccounts.data as any[]).map(a => ({ id: a.id, name: a.name, currency: a.currency, active: a.account_status === 1 })), updatedAt: FieldValue.serverTimestamp() })
+  await audit(uid, 'meta.connect', 'metaConnections/main', { via, pages: pages.data.length, adAccounts: adAccounts.data.length })
+  await health('meta', true, 'connected')
+  return { pages: pages.data.length as number, adAccounts: adAccounts.data.length as number, subscribedPages: subscribed.length }
+}
+
+/** Connect without the Facebook login round-trip: a Business Manager system user token (Business settings → Users → System users → Generate token) never expires and
+ *  is not tied to one person's Facebook account. It is checked against Meta before anything is saved, and stored encrypted like the OAuth token. */
+export const metaConnectWithToken = callable(z.object({ token: z.string().trim().min(20).max(1000) }), async (req, d) => {
+  const c = requirePerm(req, 'integrations.manage')
+  if (!MOCK() && !appSecret()) throw new HttpsError('failed-precondition', 'META_APP_SECRET is not configured.')
+  try { return await saveConnection(d.token, c.uid, null, 'system_user') }
+  catch (e: any) { throw new HttpsError('invalid-argument', e instanceof MetaError ? `Meta rejected this token: ${e.message.slice(0, 160)}` : 'Could not connect with this token.') }
+}, { secrets: META_SECRETS })
 
 export const metaDisconnect = callable(z.object({}), async (req) => {
   const c = requirePerm(req, 'integrations.manage')

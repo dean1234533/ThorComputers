@@ -70,6 +70,7 @@ export const api = {
   adminFinanceStats: fn<{ from?: string; to?: string }, any>('adminFinanceStats'),
   // marketing & lead generation (Meta)
   metaConnectUrl: fn<object, { url: string }>('metaConnectUrl'),
+  metaConnectWithToken: fn<{ token: string }, { pages: number; adAccounts: number; subscribedPages: number }>('metaConnectWithToken'),
   metaDisconnect: fn<object>('metaDisconnect'),
   syncMetaCampaigns: fn<object, { campaigns: number }>('syncMetaCampaigns'),
   reconcileMetaLeads: fn<object, { checked: number; imported: number }>('reconcileMetaLeads'),
