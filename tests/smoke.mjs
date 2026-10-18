@@ -199,7 +199,7 @@ function requestBody(key, over = {}) {
 
 section('3. Customer posts a request; privacy of address and serial')
 await step('customer uploads a photo and creates a request; retry with same key is idempotent', async () => {
-  const photoPath = `requests/${customer.uid}/tmp/p.png`
+  const photoPath = `requests/${customer.uid}/smoke-req-0001/p.png`
   await uploadBytes(ref(customer.storage, photoPath), PNG, { contentType: 'image/png' })
   const r = await customer.call('createRepairRequest', requestBody('smoke-req-0001', { photoPaths: [photoPath] }))
   ok(!r.duplicate); jobId = r.jobId
