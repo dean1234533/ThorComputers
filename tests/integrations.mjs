@@ -251,6 +251,12 @@ await step('connect Meta through the official OAuth flow: state is signed, pages
   await denied(getDoc(doc(adm.db, 'metaConnections/main')), 'permission-denied'); await denied(getDoc(doc(sa.db, 'metaConnections/main')), 'permission-denied')
   const stored = (await A.db.doc('metaConnections/main').get()).data(); ok(!/mock-token|mock-page-token/.test(JSON.stringify(stored)), 'token stored in plain text')
 })
+await step('connect Meta with a pasted Business (system user) token: Super Administrator only, stored encrypted, imports the same Pages', async () => {
+  await denied(adm.call('metaConnectWithToken', { token: 'EAAG-system-user-token-0123456789' }), 'permission-denied')
+  const r = await sa.call('metaConnectWithToken', { token: 'EAAG-system-user-token-0123456789' }); eq([r.pages, r.adAccounts], [1, 1])
+  const assets = (await getDoc(doc(adm.db, 'metaAssets/main'))).data(); eq([assets.status, assets.via], ['connected', 'system_user'])
+  ok(!JSON.stringify((await A.db.doc('metaConnections/main').get()).data()).includes('system-user-token'), 'token stored in plain text')
+})
 await step('campaign sync pulls spend/leads and lead forms', async () => {
   const r = await adm.call('syncMetaCampaigns'); eq(r.campaigns, 2); const c = (await A.db.doc('metaCampaigns/camp_1').get()).data(); eq([c.insights.spendPence, c.insights.leads, c.dailyBudgetPence], [4550, 12, 2000]); ok((await A.db.doc('metaLeadForms/form_1').get()).exists)
 })

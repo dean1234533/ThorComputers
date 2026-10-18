@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { ReactNode, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { limit, orderBy } from 'firebase/firestore'
-import { PlugZap, RefreshCw, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Circle, KeyRound, PlugZap, RefreshCw, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
 import { api, errMsg, MetaSelfTest } from '@/lib/api'
@@ -11,7 +11,7 @@ import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Section, Sh
 const APP_FIELDS = ['name', 'email', 'phone', 'postcode', 'device', 'brand', 'model', 'problem', 'method', 'urgency', 'date', 'consent'] as const
 const FIELD_LABEL: Record<string, string> = { name: 'Customer name', email: 'Email', phone: 'Telephone', postcode: 'Repair location (postcode)', device: 'Device type', brand: 'Brand', model: 'Model', problem: 'Problem description', method: 'Service method', urgency: 'Urgency', date: 'Preferred date', consent: 'Consent' }
 const DEFAULT_REQUIRED = ['name', 'email', 'postcode', 'problem']
-interface Assets { status?: string; statusReason?: string; metaUserName?: string; pages?: { id: string; name: string }[]; adAccounts?: { id: string; name: string; currency: string; active: boolean }[]; scopes?: string[]; subscribedPages?: string[] }
+interface Assets { status?: string; via?: 'oauth' | 'system_user'; statusReason?: string; metaUserName?: string; pages?: { id: string; name: string }[]; adAccounts?: { id: string; name: string; currency: string; active: boolean }[]; scopes?: string[]; subscribedPages?: string[] }
 interface Camp { name: string; status: string; objective?: string; dailyBudgetPence?: number | null; currency?: string; nonGbp?: boolean; insights?: { spendPence: number; impressions: number; reach: number; clicks: number; leads: number } }
 const webhookUrl = `https://europe-west2-${import.meta.env.VITE_FIREBASE_PROJECT_ID ?? 'your-project'}.cloudfunctions.net/metaWebhook`
 
@@ -26,6 +26,8 @@ export default function AdminMarketing() {
   useEffect(() => { const m = qs.get('meta'); if (m) { toast(m === 'connected' ? 'ok' : 'bad', m === 'connected' ? 'Meta connected. Page and ad accounts imported.' : 'Meta connection was not completed.'); qs.delete('meta'); setQs(qs, { replace: true }) } }, [])   // eslint-disable-line
   const load = () => api.adminMarketingStats({ from: from || undefined, to: to || undefined }).then(setStats).catch(e => toast('bad', errMsg(e)))
   useEffect(() => { if (enabled) load() }, [enabled, from, to])   // eslint-disable-line
+  // Check the saved keys straight away so the page shows what is already set up instead of asking for everything again.
+  useEffect(() => { if (enabled) api.metaSelfTest({}).then(setSelfTest).catch(() => {}) }, [enabled])
   if (!enabled) return <EmptyState icon={ShieldCheck} title="No access" body="Marketing needs the marketing permission." />
   const run = async (k: string, fn: () => Promise<unknown>, ok: string) => { setBusy(k); try { await fn(); toast('ok', ok); load() } catch (e) { toast('bad', errMsg(e)) } finally { setBusy('') } }
   const a = assets.data, connected = a?.status === 'connected', reauth = a?.status === 'reauth_required'
@@ -33,23 +35,25 @@ export default function AdminMarketing() {
   const camp = camps.data.find(c => c.id === campSheet)
 
   return (
-    <div><PageHeader title="Marketing & Lead Generation" sub="Connect Facebook and Instagram, watch campaign results, and see which adverts become paid repairs." />
+    <div><PageHeader title="Marketing & Lead Generation" sub="Facebook and Instagram lead adverts, campaign results, and which adverts become paid repairs." />
       <Section title="Meta connection">
-        <div className="surface space-y-3 p-5 text-sm">
+        <div className="surface space-y-4 p-5 text-sm">
           <div className="flex flex-wrap items-center gap-3"><PlugZap className="size-5 text-thor-blue" />
-            <Badge tone={connected ? 'ok' : reauth ? 'bad' : 'neutral'}>{connected ? 'Connected' : reauth ? 'Reconnect needed' : 'Not connected'}</Badge>
-            {a?.metaUserName && <span className="text-thor-text">as {a.metaUserName}</span>}
+            <Badge tone={connected ? 'ok' : reauth ? 'bad' : 'neutral'}>{connected ? 'Connected' : reauth ? 'Reconnect needed' : 'Not connected yet'}</Badge>
+            {a?.metaUserName && <span className="text-thor-text">as {a.metaUserName}{a.via === 'system_user' ? ' (Business access token)' : ''}</span>}
             {health.data && <Badge tone={health.data.ok ? 'neutral' : 'bad'}>Last Meta API call: {health.data.ok ? 'succeeded' : 'failed'}</Badge>}</div>
+          {!connected && <SetupSteps result={selfTest} reauth={reauth} canConnect={can('integrations.manage')} busy={busy} onConnect={() => run('connect', async () => { window.location.assign((await api.metaConnectUrl({})).url) }, 'Redirecting to Meta…')}
+            onToken={token => run('token', async () => { const r = await api.metaConnectWithToken({ token }); toast('info', `${r.pages} Page(s) and ${r.adAccounts} ad account(s) imported.`) }, 'Meta connected.')} />}
           <ConnectionCheck result={selfTest} busy={busy === 'check'} onRun={() => run('check', async () => setSelfTest(await api.metaSelfTest({})), 'Connection check finished.')} />
           {reauth && <p className="rounded-xl bg-bad/10 p-3 text-bad">The Meta access expired or a permission was revoked: {a?.statusReason}. Reconnect to resume lead imports.</p>}
           {health.data && !health.data.ok && <p className="text-thor-text">Last problem: {health.data.detail}</p>}
           {connected && <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-thor-text">Facebook Pages</p><ul>{(a?.pages ?? []).map(p => <li key={p.id}>{p.name} {a?.subscribedPages?.includes(p.id) ? <Badge tone="ok">Lead webhook on</Badge> : <Badge tone="warn">Not subscribed</Badge>}</li>)}</ul></div>
             <div><p className="text-thor-text">Ad accounts</p><ul>{(a?.adAccounts ?? []).map(p => <li key={p.id}>{p.name} · {p.currency}{p.currency !== 'GBP' && <Badge tone="warn">Not GBP</Badge>}</li>)}</ul></div></div>}
-          <div className="flex flex-wrap gap-2">
-            {can('integrations.manage') ? <Button loading={busy === 'connect'} onClick={() => run('connect', async () => { window.location.assign((await api.metaConnectUrl({})).url) }, 'Redirecting to Meta…')}>{connected || reauth ? 'Reconnect Meta' : 'Connect Meta account'}</Button> : <p className="text-thor-text">Only a Super Administrator can connect Meta.</p>}
-            {connected && <><Button variant="soft" loading={busy === 'sync'} onClick={() => run('sync', () => api.syncMetaCampaigns({}), 'Campaigns synced.')}><RefreshCw className="size-4" />Sync campaigns</Button>
-              <Button variant="soft" loading={busy === 'rec'} onClick={() => run('rec', async () => { const r = await api.reconcileMetaLeads({}); toast('info', `${r.imported} missed lead(s) imported.`) }, 'Checked for missed leads.')}>Check for missed leads</Button></>}
-            {connected && can('integrations.manage') && <Button variant="ghost" onClick={() => confirm('Disconnect Meta? Lead imports stop until you reconnect.') && run('dis', () => api.metaDisconnect({}), 'Disconnected.')}>Disconnect</Button>}</div>
+          {connected && <div className="flex flex-wrap gap-2">
+            <Button variant="soft" loading={busy === 'sync'} onClick={() => run('sync', () => api.syncMetaCampaigns({}), 'Campaigns synced.')}><RefreshCw className="size-4" />Sync campaigns</Button>
+            <Button variant="soft" loading={busy === 'rec'} onClick={() => run('rec', async () => { const r = await api.reconcileMetaLeads({}); toast('info', `${r.imported} missed lead(s) imported.`) }, 'Checked for missed leads.')}>Check for missed leads</Button>
+            {can('integrations.manage') && <><Button variant="ghost" loading={busy === 'connect'} onClick={() => run('connect', async () => { window.location.assign((await api.metaConnectUrl({})).url) }, 'Redirecting to Meta…')}>Reconnect Meta</Button>
+              <Button variant="ghost" onClick={() => confirm('Disconnect Meta? Lead imports stop until you reconnect.') && run('dis', () => api.metaDisconnect({}), 'Disconnected.')}>Disconnect</Button></>}</div>}
           <p className="text-xs text-thor-text">You sign in on Meta’s own page; Thor Computer never sees your Facebook password. Permissions requested: {(a?.scopes ?? ['ads_read', 'ads_management', 'leads_retrieval', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_manage_ads']).join(', ')}. Live use needs Meta App Review and business verification.</p>
           <p className="text-xs text-thor-text">Webhook callback URL for your Meta app: <code className="break-all">{webhookUrl}</code> (subscribe to <b>leadgen</b>; the verify token is the <code>META_VERIFY_TOKEN</code> secret).</p>
         </div>
@@ -118,6 +122,29 @@ function SettingsPanel() {
       <Input label="Max daily budget (£)" type="number" min="1" value={v.maxDailyBudgetPence / 100} onChange={e => setV({ ...v, maxDailyBudgetPence: Math.round(Number(e.target.value) * 100) })} hint="Budget changes above this are refused." />
       <Input label="Max single budget change (%)" type="number" min="1" max="500" value={v.maxBudgetChangePct} onChange={e => setV({ ...v, maxBudgetChangePct: Number(e.target.value) })} /></div>
     <Button onClick={save} loading={busy}>Save settings</Button></div></Section>
+}
+
+const KEY_CHECKS = ['app_id', 'app_secret', 'verify_token', 'app_url']
+const Step = ({ done, n, title, children }: { done: boolean; n: number; title: string; children: ReactNode }) =>
+    <li className="flex gap-3">{done ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-ok" /> : <Circle className="mt-0.5 size-5 shrink-0 text-thor-text" />}<div className="min-w-0 flex-1"><p className="font-medium">Step {n}: {title}</p>{children}</div></li>
+/** Splits setup into what the saved keys already cover (step 1) and the one thing keys cannot do: Meta only hands over a Page and ad account when someone who manages them grants access (step 2). */
+function SetupSteps({ result, reauth, canConnect, busy, onConnect, onToken }: { result: MetaSelfTest | null; reauth: boolean; canConnect: boolean; busy: string; onConnect: () => void; onToken: (t: string) => void }) {
+  const [token, setToken] = useState('')
+  const keys = result?.checks.filter(c => KEY_CHECKS.includes(c.id)) ?? [], keysOk = !!result && keys.every(c => c.ok), keysBad = !!result && !keysOk
+  return <ol className="space-y-4 rounded-2xl bg-paper p-4">
+    <Step done={keysOk} n={1} title="App keys">
+      {!result ? <p className="text-thor-text">Checking your saved keys…</p> : keysOk ? <p className="text-thor-text">Done. Your Meta app ID, app secret and webhook verify token are saved. You do not need to enter them again.</p>
+        : <ul className="text-thor-text">{keys.filter(c => !c.ok).map(c => <li key={c.id}>{c.label}: {c.detail}. {c.fix}</li>)}</ul>}
+    </Step>
+    <Step done={false} n={2} title={reauth ? 'Give access again' : 'Give access to your Facebook Page and ad account (one time)'}>
+      <p className="text-thor-text">The keys identify the Thor Computer app to Meta, but they do not give it access to your Page’s leads or your ad account. Meta requires the owner of those to approve that once. Choose either way:</p>
+      {!canConnect ? <p className="mt-2 text-thor-text">Only a Super Administrator can do this step.</p> : <div className="mt-3 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-xl bg-white p-4 ring-1 ring-ink/10"><p className="font-medium">Sign in with Facebook</p><p className="mb-3 text-thor-text">Quickest. You approve on Meta’s own page and come straight back. The access lasts about 60 days, then this page asks you to reconnect.</p>
+          <Button loading={busy === 'connect'} disabled={keysBad} onClick={onConnect}>{reauth ? 'Reconnect Meta' : 'Connect with Facebook'}</Button></div>
+        <div className="rounded-xl bg-white p-4 ring-1 ring-ink/10"><p className="flex items-center gap-2 font-medium"><KeyRound className="size-4" />Paste a Business access token</p><p className="mb-3 text-thor-text">Never expires. In Meta Business settings → Users → System users, add your Page and ad account to a system user, then <b>Generate token</b> for this app with the permissions listed below.</p>
+          <Input label="System user access token" type="password" autoComplete="off" value={token} onChange={e => setToken(e.target.value)} />
+          <Button className="mt-2" loading={busy === 'token'} disabled={keysBad || token.trim().length < 20} onClick={() => { onToken(token.trim()); setToken('') }}>Connect with token</Button></div></div>}
+    </Step></ol>
 }
 
 const OVERALL: Record<MetaSelfTest['overall'], { tone: 'ok' | 'warn' | 'bad' | 'neutral'; text: string }> = {
