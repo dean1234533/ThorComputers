@@ -10,11 +10,15 @@ import { Splash } from './Guards'
  *  If the status check itself fails we fail OPEN in the UI only; the server remains the enforcement point. */
 export default function AdminMfaGuard() {
   const { user } = useAuth(); const loc = useLocation()
-  const [st, setSt] = useState<AdminMfaStatus | null | 'error'>(null)
-  useEffect(() => { let live = true; api.adminMfaStatus({}).then(s => live && setSt(s)).catch(() => live && setSt('error')); return () => { live = false } }, [user?.uid])
-  if (st === null) return <Splash />
+  // The last answer for this account is remembered so reopening the app does not wait on a server round trip; it is refreshed in the background.
+  const key = `thor.mfa.${user?.uid}`
+  const [fresh, setFresh] = useState(false)
+  const [st, setSt] = useState<AdminMfaStatus | null | 'error'>(() => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as AdminMfaStatus : null } catch { return null } })
+  useEffect(() => { let live = true; api.adminMfaStatus({}).then(s => { if (!live) return; setSt(s); setFresh(true); try { localStorage.setItem(key, JSON.stringify({ ...s, admins: undefined })) } catch { /* ignore */ } }).catch(() => { if (live) { setSt(v => v ?? 'error'); setFresh(true) } }); return () => { live = false } }, [key])
   const onSecurity = loc.pathname === '/admin/security'
-  if (st !== 'error' && st.mode === 'enforce' && !st.sessionHasSecondFactor && !onSecurity) return <Navigate to="/admin/security" replace />
+  const blocked = st !== null && st !== 'error' && st.mode === 'enforce' && !st.sessionHasSecondFactor && !onSecurity
+  if (st === null || (blocked && !fresh)) return <Splash />   // a remembered answer may only let the admin in early, never send them away
+  if (blocked) return <Navigate to="/admin/security" replace />
   const nag = st !== 'error' && st.mode !== 'off' && !st.sessionHasSecondFactor && !onSecurity
   return (<>
     {nag && <div role="status" className="sticky top-0 z-50 bg-warn/20 px-4 py-2 text-center text-sm text-ink">

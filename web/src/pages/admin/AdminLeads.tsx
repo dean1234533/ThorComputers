@@ -5,7 +5,7 @@ import { Inbox, Copy, ExternalLink, ShieldCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth'
 import { useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
-import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Select, Sheet, Textarea, useToast } from '@/components/ui'
+import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Select, Sheet, Textarea, usePaged, useToast } from '@/components/ui'
 import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 interface Lead {
@@ -26,6 +26,7 @@ export default function AdminLeads() {
   const [status, setStatus] = useState(''), [platform, setPlatform] = useState(''), [q, setQ] = useState(''), [open, setOpen] = useState<string | null>(null)
   const rows = useMemo(() => data.filter(l => (!status || l.status === status) && (!platform || l.platform === platform) &&
     (!q || [l.mapped?.name, l.mapped?.email, l.campaignName, l.mapped?.problem, l.id].some(v => v?.toLowerCase().includes(q.toLowerCase())))), [data, status, platform, q])
+  const paged = usePaged(rows, [status, platform, q, rangeKey(range)])
   if (!can('marketing.manage')) return <EmptyState icon={ShieldCheck} title="No access" body="Incoming leads need the marketing permission." />
   const lead = data.find(l => l.id === open)
   return (
@@ -39,7 +40,7 @@ export default function AdminLeads() {
       </div>
       {loading ? <ListSkeleton rows={4} /> : error ? <EmptyState icon={Inbox} title="Can’t load leads" body={errMsg(error)} /> : rows.length === 0 ? <EmptyState icon={Inbox} title="No leads yet" body="Leads appear here the moment someone submits your Facebook or Instagram lead form. Connect Meta under Marketing." /> :
         <div className="overflow-x-auto rounded-3xl bg-white shadow-sm ring-1 ring-ink/5"><table className="w-full min-w-[820px] text-left text-sm"><thead className="text-xs uppercase text-thor-text"><tr>{['Customer', 'Source', 'Campaign', 'Received', 'Device / issue', 'Area', 'Status', 'Job'].map(h => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-ink/8">{rows.map(l => <tr key={l.id} className="cursor-pointer hover:bg-paper" onClick={() => setOpen(l.id)}>
+          <tbody className="divide-y divide-ink/8">{paged.items.map(l => <tr key={l.id} className="cursor-pointer hover:bg-paper" onClick={() => setOpen(l.id)}>
             <td className="px-4 py-3"><button className="text-left font-medium text-thor-blue hover:underline" onClick={() => setOpen(l.id)}>{l.mapped?.name || (l.purged ? 'Removed (retention)' : 'Unknown')}</button><p className="text-xs text-thor-text">{l.mapped?.email}</p></td>
             <td className="px-4 py-3 capitalize">{l.platform ?? '—'}</td><td className="px-4 py-3">{l.campaignName ?? l.campaignId ?? '—'}</td>
             <td className="px-4 py-3 whitespace-nowrap">{l.createdAt?.toDate().toLocaleDateString('en-GB')}</td>
@@ -47,6 +48,7 @@ export default function AdminLeads() {
             <td className="px-4 py-3">{l.mapped?.postcode?.split(' ')[0] ?? '—'}</td>
             <td className="px-4 py-3"><Badge tone={LEAD_STATUS[l.status]?.tone ?? 'neutral'}>{LEAD_STATUS[l.status]?.label ?? l.status}</Badge></td>
             <td className="px-4 py-3">{l.jobId ? <Link to={`/admin/jobs`} onClick={e => e.stopPropagation()} className="text-thor-blue hover:underline">View</Link> : '—'}</td></tr>)}</tbody></table></div>}
+      {!loading && !error && paged.pager}
       <LeadSheet lead={lead ? { ...lead } : null} onClose={() => setOpen(null)} />
     </div>)
 }

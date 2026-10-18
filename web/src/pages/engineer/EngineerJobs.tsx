@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { useDoc, useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
 import { geocode, miles, LatLng } from '@/lib/geo'
-import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Section, Select, StatusPill, Textarea, useToast, cx } from '@/components/ui'
+import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Section, Select, StatusPill, Textarea, usePaged, useToast, cx } from '@/components/ui'
 import { StorageImg } from '@/components/StorageImg'
 import { Quote } from '@/components/QuoteCompare'
 import { DEVICE_TYPES, SERVICE_METHODS, gbp, JobStatus, ENGINEER_NEXT, JOB_STATUS_LABEL } from '@/types/domain'
@@ -35,6 +35,7 @@ export function AvailableJobs() {
   const jobs = useQuery<Job>(specs.length ? 'repairRequests' : null, () => [where('status', '==', 'open'), where('requiredSpecs', 'array-contains-any', specs.slice(0, 30)), orderBy('createdAt', 'desc'), limit(n)], [specs.join(','), n])
   const shown = useMemo(() => jobs.data.filter(j => (!f.device || j.device.type === f.device) && (!f.urgency || j.urgency === f.urgency) && (!f.method || j.serviceMethods.includes(f.method))
     && (!f.age || (j.createdAt && Date.now() - j.createdAt.toDate().getTime() < Number(f.age) * 86400_000)) && (!f.dist || !geo || miles(geo, j.location) <= Number(f.dist))), [jobs.data, f, geo])
+  const paged = usePaged(shown, f)
   return (
     <ApprovalGate><div><PageHeader title="Available Jobs" sub="Open repairs that match your specialisations." />
       <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -44,10 +45,10 @@ export function AvailableJobs() {
         <Select label="Posted" value={f.age} onChange={e => setF({ ...f, age: e.target.value })}><option value="">Any time</option><option value="1">Last 24h</option><option value="3">Last 3 days</option><option value="7">Last week</option></Select>
         <Select label="Distance" value={f.dist} onChange={e => setF({ ...f, dist: e.target.value })} disabled={!geo}><option value="">Any ({radius} mi area)</option>{[5, 10, 20, 50].map(d => <option key={d} value={d}>Within {d} mi</option>)}</Select></div>
       {jobs.loading ? <ListSkeleton /> : shown.length === 0 ? <EmptyState icon={Search} title="No matching jobs right now" body="New jobs appear here in real time, and we’ll notify you when one matches." /> :
-        <ul className="space-y-3">{shown.map(j => <li key={j.id}><Link to={`/engineer/jobs/${j.id}`} className="block surface p-5 transition hover:shadow-md">
+        <><ul className="space-y-3">{paged.items.map(j => <li key={j.id}><Link to={`/engineer/jobs/${j.id}`} className="block surface p-5 transition hover:shadow-md">
           <div className="flex items-start justify-between gap-3"><div><p className="font-medium">{devLabel(j.device.type)} · {j.device.manufacturer}</p><p className="mt-0.5 line-clamp-2 text-sm text-thor-slate">{j.summary}</p></div>{j.urgency === 'urgent' && <Badge tone="bad"><Zap className="size-3" />Urgent</Badge>}</div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-thor-text"><span className="flex items-center gap-1"><MapPin className="size-3.5" />{j.location.area}{geo && ` · ${miles(geo, j.location).toFixed(0)} mi`}</span><span className="flex items-center gap-1"><Clock className="size-3.5" />{age(j.createdAt?.toDate())}</span><span>{j.serviceMethods.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(' / ')}</span><span className="ml-auto font-medium text-thor-blue">{j.quoteCount} quote{j.quoteCount === 1 ? '' : 's'}</span></div></Link></li>)}</ul>}
-      {jobs.data.length >= n && <Button variant="soft" className="mx-auto mt-5 flex" onClick={() => setN(n + 20)}>Load more</Button>}</div></ApprovalGate>)
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-thor-text"><span className="flex items-center gap-1"><MapPin className="size-3.5" />{j.location.area}{geo && ` · ${miles(geo, j.location).toFixed(0)} mi`}</span><span className="flex items-center gap-1"><Clock className="size-3.5" />{age(j.createdAt?.toDate())}</span><span>{j.serviceMethods.map(m => SERVICE_METHODS.find(s => s.id === m)?.label).join(' / ')}</span><span className="ml-auto font-medium text-thor-blue">{j.quoteCount} quote{j.quoteCount === 1 ? '' : 's'}</span></div></Link></li>)}</ul>{paged.pager}</>}
+      {jobs.data.length >= n && paged.last && <Button variant="soft" className="mx-auto mt-5 flex" onClick={() => setN(n + 20)}>Load more</Button>}</div></ApprovalGate>)
 }
 
 const poundsToPence = (v: string) => Math.round((parseFloat(v) || 0) * 100)
