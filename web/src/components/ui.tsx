@@ -1,6 +1,6 @@
 import { createContext, forwardRef, useCallback, useContext, useEffect, useId, useState, ReactNode, ButtonHTMLAttributes, InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { BadgeCheck, CheckCircle2, AlertCircle, Info, Loader2, Star, X, UserRound } from 'lucide-react'
+import { BadgeCheck, CheckCircle2, AlertCircle, ChevronLeft, ChevronRight, Info, Loader2, Star, X, UserRound } from 'lucide-react'
 import { JOB_STATUS_LABEL, JobStatus } from '@/types/domain'
 
 export const cx = (...a: (string | false | null | undefined)[]) => a.filter(Boolean).join(' ')
@@ -111,6 +111,20 @@ export function EmptyState({ icon: Icon, title, body, action }: { icon: React.Co
       <h3 className="font-display text-xl text-ink">{title}</h3><p className="mt-1.5 text-thor-text">{body}</p>{action && <div className="mt-5">{action}</div>}
     </div>
   )
+}
+// ---------- paging ----------
+// Filtered lists never render every match at once: show one page and let people step through.
+export const PAGE_SIZE = 10
+export function usePaged<T>(items: readonly T[], resetKey: unknown, size = PAGE_SIZE) {
+  const key = JSON.stringify(resetKey); const [st, setSt] = useState({ key, page: 0 })
+  const pages = Math.max(1, Math.ceil(items.length / size)), page = Math.min(st.key === key ? st.page : 0, pages - 1)
+  const go = (n: number) => setSt({ key, page: n })
+  return { items: items.slice(page * size, page * size + size), page, pages, last: page === pages - 1, pager: <Pager page={page} pages={pages} total={items.length} size={size} onPage={go} /> }
+}
+export function Pager({ page, pages, total, size, onPage }: { page: number; pages: number; total: number; size: number; onPage: (n: number) => void }) {
+  if (pages <= 1) return null
+  return <nav aria-label="Pagination" className="pager mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-thor-text"><p role="status">Showing {page * size + 1}–{Math.min(total, (page + 1) * size)} of {total}</p>
+    <div className="flex items-center gap-2"><Button size="sm" variant="ghost" onClick={() => onPage(page - 1)} disabled={page === 0}><ChevronLeft className="size-4" />Previous</Button><span aria-current="page">Page {page + 1} of {pages}</span><Button size="sm" variant="ghost" onClick={() => onPage(page + 1)} disabled={page >= pages - 1}>Next<ChevronRight className="size-4" /></Button></div></nav>
 }
 export const PageHeader = ({ title, sub, action }: { title: string; sub?: string; action?: ReactNode }) => (
   <header className="page-header flex flex-wrap items-end justify-between gap-4"><div><h1 className="font-display text-3xl font-bold text-ink md:text-[34px]">{title}</h1>{sub && <p className="mt-2 text-sm leading-relaxed text-thor-text">{sub}</p>}</div>{action}</header>

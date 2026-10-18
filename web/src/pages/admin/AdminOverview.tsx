@@ -6,7 +6,7 @@ import { Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, Banknote, CalendarCh
 import { useAuth } from '@/lib/auth'
 import { useQuery } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
-import { Badge, EmptyState, ListSkeleton, Select, Skeleton, StatusPill } from '@/components/ui'
+import { Badge, EmptyState, ListSkeleton, Select, Skeleton, StatusPill, usePaged } from '@/components/ui'
 import { gbp, type JobStatus } from '@/types/domain'
 
 interface RecentActivity { id: string; action: string; target: string; createdAt: number | null }
@@ -58,11 +58,14 @@ function RequestsChart({ data }: { data: Record<string, number> | undefined }) {
   </section>
 }
 
+// Kept in memory only (never on disk), so coming back to the overview shows the last figures at once while fresh ones load.
+let lastStats: { uid?: string; stats: Stats } | null = null
+
 export default function AdminOverview() {
-  const [stats, setStats] = useState<Stats | null>(null), [error, setError] = useState(''), [activityAction, setActivityAction] = useState('')
-  const { can, profile } = useAuth(), canJobs = can('jobs.manage')
+  const { can, profile, user } = useAuth(), canJobs = can('jobs.manage')
+  const [stats, setStats] = useState<Stats | null>(() => lastStats?.uid === user?.uid ? lastStats!.stats : null), [error, setError] = useState(''), [activityAction, setActivityAction] = useState('')
   const incoming = useQuery<Incoming>(canJobs ? 'repairRequests' : null, () => [orderBy('createdAt', 'desc'), limit(12)], [canJobs])
-  useEffect(() => { let live = true; api.adminStats({}).then(v => { if (live) setStats(v as Stats) }).catch(e => { if (live) setError(errMsg(e)) }); return () => { live = false } }, [])
+  useEffect(() => { let live = true; api.adminStats({}).then(v => { lastStats = { uid: user?.uid, stats: v as Stats }; if (live) setStats(v as Stats) }).catch(e => { if (live && lastStats?.uid !== user?.uid) setError(errMsg(e)) }); return () => { live = false } }, []) // eslint-disable-line
   if (error) return <EmptyState icon={ShieldCheck} title="Can’t load stats" body={error} />
   const t = stats?.totals, finance = stats?.finance, marketing = stats?.marketing
   const actions = [
@@ -77,6 +80,7 @@ export default function AdminOverview() {
     { icon: CheckCircle2, label: 'Completed jobs', value: t?.completed, hint: 'Repairs marked completed', to: '/admin/jobs', tone: 'orange', allowed: canJobs },
   ].filter(a => a.allowed)
   const activity = stats?.recentActivity ?? [], activityActions = [...new Set(activity.map(a => a.action))].sort(), filtered = activity.filter(a => !activityAction || a.action === activityAction)
+  const paged = usePaged(filtered, activityAction)
   return <div className="admin-overview">
     <header className="admin-page-intro"><div><p className="admin-overline">THOR / OPERATIONS</p><h1>Overview<span>.</span></h1><p>Welcome back{profile?.fullName ? `, ${profile.fullName.split(' ')[0]}` : ''}. Here’s your business at a glance.</p></div><span className="admin-date-chip"><CalendarCheck className="size-4" />{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'Europe/London' })}</span></header>
 
@@ -93,7 +97,7 @@ export default function AdminOverview() {
         <div className="admin-table-labels"><span>DEVICE / REFERENCE</span><span>STATUS</span></div>
         {incoming.loading ? <div className="p-5"><ListSkeleton rows={2} /></div> : incoming.error ? <p role="alert" className="p-5 text-sm text-bad">{errMsg(incoming.error)}</p> : incoming.data.length === 0 ? <div className="admin-panel-empty"><Wrench className="size-7" /><h3>No repair requests yet</h3><p>New ones appear here as they arrive.</p></div> : <ul className="admin-request-list" aria-live="polite">{incoming.data.map(j => <li key={j.id}><span className="admin-device-icon"><Wrench className="size-[18px]" /></span><div className="min-w-0 flex-1"><p className="admin-request-title">{j.device.manufacturer} {j.device.model}</p><p className="admin-request-meta"><span>{j.reference}</span><span>{j.location?.area}</span></p><p className="admin-request-time">{since(j.createdAt?.toDate())} · {j.quoteCount ?? 0} quote{j.quoteCount === 1 ? '' : 's'}{j.source && j.source !== 'app' ? ` · ${j.source === 'meta' ? 'Facebook/Instagram' : 'Website'}` : ''}</p></div><div className="admin-request-status">{j.urgency === 'urgent' && <Badge tone="bad">Urgent</Badge>}<StatusPill status={j.status} /></div></li>)}</ul>}
       </section>}
-      <section className="admin-panel admin-activity"><PanelHeading icon={Activity} eyebrow="Your audit trail" title="Recent activity" /><div className="admin-activity-filter"><Select label="Filter by action" value={activityAction} onChange={e => setActivityAction(e.target.value)} disabled={!stats || activity.length === 0}><option value="">All actions</option>{activityActions.map(a => <option key={a} value={a}>{human(a)}</option>)}</Select>{stats && <p role="status">Showing {filtered.length} of {activity.length} latest entries</p>}</div>{!stats ? <div className="p-5"><ListSkeleton rows={2} /></div> : filtered.length === 0 ? <div className="admin-panel-empty"><CheckCircle2 className="size-7" /><h3>{activity.length ? 'No matching activity' : 'A clean slate'}</h3><p>{activity.length ? 'Choose another action to see more entries.' : 'Platform activity will appear here.'}</p></div> : <ol className="admin-timeline">{filtered.map(a => <li key={a.id}><span className="admin-timeline-dot" /><div><strong>{human(a.action)}</strong><p title={a.target}>{a.target}</p><time dateTime={a.createdAt === null ? undefined : new Date(a.createdAt).toISOString()}>{a.createdAt === null ? 'Date unavailable' : new Date(a.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}</time></div></li>)}</ol>}</section>
+      <section className="admin-panel admin-activity"><PanelHeading icon={Activity} eyebrow="Your audit trail" title="Recent activity" /><div className="admin-activity-filter"><Select label="Filter by action" value={activityAction} onChange={e => setActivityAction(e.target.value)} disabled={!stats || activity.length === 0}><option value="">All actions</option>{activityActions.map(a => <option key={a} value={a}>{human(a)}</option>)}</Select>{stats && <p role="status">Showing {filtered.length} of {activity.length} latest entries</p>}</div>{!stats ? <div className="p-5"><ListSkeleton rows={2} /></div> : filtered.length === 0 ? <div className="admin-panel-empty"><CheckCircle2 className="size-7" /><h3>{activity.length ? 'No matching activity' : 'A clean slate'}</h3><p>{activity.length ? 'Choose another action to see more entries.' : 'Platform activity will appear here.'}</p></div> : <><ol className="admin-timeline">{paged.items.map(a => <li key={a.id}><span className="admin-timeline-dot" /><div><strong>{human(a.action)}</strong><p title={a.target}>{a.target}</p><time dateTime={a.createdAt === null ? undefined : new Date(a.createdAt).toISOString()}>{a.createdAt === null ? 'Date unavailable' : new Date(a.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' })}</time></div></li>)}</ol><div className="admin-activity-pager">{paged.pager}</div></>}</section>
     </div>
 
     {marketing && <section className="admin-panel admin-acquisition"><PanelHeading icon={Megaphone} eyebrow="Reach & acquisition" title="Advertising" action={<Link to="/admin/marketing" className="admin-text-link">Marketing <ArrowUpRight className="size-3.5" /></Link>} /><div className="admin-acquisition-grid">{[['Facebook leads', marketing.facebookLeads, '/admin/leads'], ['Instagram leads', marketing.instagramLeads, '/admin/leads'], ['Leads awaiting verification', marketing.leadsAwaitingVerification, '/admin/leads'], ['Advertising spend', gbp(marketing.advertisingSpendPence), '/admin/marketing'], ['Cost per lead', marketing.costPerLeadPence ? gbp(marketing.costPerLeadPence) : '—', '/admin/marketing'], ['Advertising-generated jobs', marketing.advertisingJobs, '/admin/jobs']].map(([label, value, to]) => <Link to={String(to)} key={label}><span>{label}</span><strong>{value}</strong></Link>)}</div></section>}

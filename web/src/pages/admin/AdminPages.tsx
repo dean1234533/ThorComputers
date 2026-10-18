@@ -6,7 +6,7 @@ import { storage } from '@/lib/firebase'
 import { useAuth } from '@/lib/auth'
 import { useQuery, WithId } from '@/hooks/useFirestore'
 import { api, errMsg } from '@/lib/api'
-import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Select, Sheet, Stars, StatusPill, Textarea, Input, useToast } from '@/components/ui'
+import { Badge, Button, EmptyState, ListSkeleton, PageHeader, Select, Sheet, Stars, StatusPill, Textarea, Input, usePaged, useToast } from '@/components/ui'
 import { gbp, JobStatus, SPECIALISATIONS } from '@/types/domain'
 
 // ---------- shared helpers ----------
@@ -28,10 +28,10 @@ interface Qual { engineerId: string; name: string; issuer: string; storagePath: 
 export function Approvals() {
   const [filter, setFilter] = useState('pending')
   const apps = useQuery<App>('engineerApplications', () => [where('status', '==', filter), orderBy('submittedAt', 'asc'), limit(50)], [filter])
-  const [open, setOpen] = useState<WithId<App> | null>(null)
+  const [open, setOpen] = useState<WithId<App> | null>(null); const paged = usePaged(apps.data, filter)
   return (
     <PermGate perm="engineers.review"><div><PageHeader title="Approvals" sub="Review engineer applications and qualifications." action={<div className="w-44"><Select label="" aria-label="Status" value={filter} onChange={e => setFilter(e.target.value)}>{['pending', 'info_requested', 'approved', 'rejected', 'suspended'].map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}</Select></div>} />
-      {apps.loading ? <ListSkeleton /> : apps.data.length === 0 ? <EmptyState icon={ShieldCheck} title="Nothing here" body="No applications with this status." /> : <ul className="space-y-3">{apps.data.map(a => <li key={a.id}><button onClick={() => setOpen(a)} className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-ink/5 hover:shadow-md"><div className="min-w-0 flex-1"><p className="font-medium">{a.profile?.displayName}{a.profile?.businessName && ` · ${a.profile.businessName}`}</p><p className="text-sm text-thor-text">{a.profile?.yearsExperience} yrs · {a.profile?.specialisations?.length} specialisations · submitted {day(a.submittedAt)}</p></div><Badge tone="warn">{a.status.replace('_', ' ')}</Badge></button></li>)}</ul>}
+      {apps.loading ? <ListSkeleton /> : apps.data.length === 0 ? <EmptyState icon={ShieldCheck} title="Nothing here" body="No applications with this status." /> : <><ul className="space-y-3">{paged.items.map(a => <li key={a.id}><button onClick={() => setOpen(a)} className="flex w-full items-center gap-4 rounded-2xl bg-white p-4 text-left shadow-sm ring-1 ring-ink/5 hover:shadow-md"><div className="min-w-0 flex-1"><p className="font-medium">{a.profile?.displayName}{a.profile?.businessName && ` · ${a.profile.businessName}`}</p><p className="text-sm text-thor-text">{a.profile?.yearsExperience} yrs · {a.profile?.specialisations?.length} specialisations · submitted {day(a.submittedAt)}</p></div><Badge tone="warn">{a.status.replace('_', ' ')}</Badge></button></li>)}</ul>{paged.pager}</>}
       {open && <ReviewApplication app={open} onClose={() => setOpen(null)} />}</div></PermGate>)
 }
 
@@ -74,11 +74,11 @@ export const AdminEngineers = () => <UserList role="engineer" title="Engineers" 
 export function AdminJobs() {
   const toast = useToast(); const [st, setSt] = useState('')
   const j = useQuery<{ reference: string; status: JobStatus; device: { manufacturer: string; model: string }; location: { area: string }; quoteCount: number; createdAt?: { toDate(): Date } }>('repairRequests', () => { const c: QueryConstraint[] = []; if (st) c.push(where('status', '==', st)); c.push(orderBy('createdAt', 'desc'), limit(100)); return c }, [st])
-  const [target, setTarget] = useState<{ id: string; to: string } | null>(null)
+  const [target, setTarget] = useState<{ id: string; to: string } | null>(null); const paged = usePaged(j.data, st)
   return (
     <PermGate perm="jobs.manage"><div><PageHeader title="Repair Requests" action={<div className="w-48"><Select label="" aria-label="Status filter" value={st} onChange={e => setSt(e.target.value)}><option value="">All statuses</option>{['open', 'engineer_selected', 'appointment_scheduled', 'in_progress', 'completed', 'closed', 'cancelled', 'disputed'].map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</Select></div>} />
-      {j.loading ? <ListSkeleton /> : j.data.length === 0 ? <EmptyState icon={Wrench} title="No requests" body="Nothing matches this filter." /> : <ul className="space-y-2">{j.data.map(x => <li key={x.id} className="flex items-center gap-3 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.reference} · {x.device.manufacturer} {x.device.model}</p><p className="text-xs text-thor-text">{x.location.area} · {x.quoteCount} quotes · {day(x.createdAt)}</p></div><StatusPill status={x.status} />
-        {x.status === 'disputed' && <Button size="sm" variant="soft" onClick={() => setTarget({ id: x.id, to: 'closed' })}>Resolve</Button>}{['open', 'engineer_selected', 'appointment_scheduled'].includes(x.status) && <Button size="sm" variant="ghost" className="text-bad" onClick={() => setTarget({ id: x.id, to: 'cancelled' })}>Cancel</Button>}</li>)}</ul>}
+      {j.loading ? <ListSkeleton /> : j.data.length === 0 ? <EmptyState icon={Wrench} title="No requests" body="Nothing matches this filter." /> : <><ul className="space-y-2">{paged.items.map(x => <li key={x.id} className="flex items-center gap-3 surface p-5"><div className="min-w-0 flex-1"><p className="font-medium">{x.reference} · {x.device.manufacturer} {x.device.model}</p><p className="text-xs text-thor-text">{x.location.area} · {x.quoteCount} quotes · {day(x.createdAt)}</p></div><StatusPill status={x.status} />
+        {x.status === 'disputed' && <Button size="sm" variant="soft" onClick={() => setTarget({ id: x.id, to: 'closed' })}>Resolve</Button>}{['open', 'engineer_selected', 'appointment_scheduled'].includes(x.status) && <Button size="sm" variant="ghost" className="text-bad" onClick={() => setTarget({ id: x.id, to: 'cancelled' })}>Cancel</Button>}</li>)}</ul>{paged.pager}</>}
       {target && <NoteSheet open title={target.to === 'closed' ? 'Resolve dispute' : 'Cancel request'} action="Confirm" onClose={() => setTarget(null)} onSubmit={async note => { try { await api.changeJobStatus({ jobId: target.id, to: target.to, note }); toast('ok', 'Updated.') } catch (e) { toast('bad', errMsg(e)); throw e } }} />}</div></PermGate>)
 }
 export function AdminQuotations() {
@@ -96,11 +96,11 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
 // ---------- reviews & reports ----------
 interface Rv { reference: string; direction: string; rating: number; text: string; status: string; subjectId: string; authorId: string; createdAt?: { toDate(): Date } }
 export function AdminReviews() {
-  const toast = useToast(); const [st, setSt] = useState('pending'); const r = useQuery<Rv>('reviews', () => [where('status', '==', st), orderBy('createdAt', 'desc'), limit(50)], [st]); const [t, setT] = useState<{ id: string; d: 'approve' | 'remove' | 'restore' } | null>(null)
+  const toast = useToast(); const [st, setSt] = useState('pending'); const r = useQuery<Rv>('reviews', () => [where('status', '==', st), orderBy('createdAt', 'desc'), limit(50)], [st]); const [t, setT] = useState<{ id: string; d: 'approve' | 'remove' | 'restore' } | null>(null); const paged = usePaged(r.data, st)
   return (
     <PermGate perm="reviews.moderate"><div><PageHeader title="Reviews" sub="Feedback about customers is held for approval before it’s visible." action={<div className="w-40"><Select label="" aria-label="Status" value={st} onChange={e => setSt(e.target.value)}><option value="pending">Pending</option><option value="published">Published</option><option value="removed">Removed</option></Select></div>} />
-      {r.loading ? <ListSkeleton /> : r.data.length === 0 ? <EmptyState icon={CheckCircle2} title="Queue clear" body="No reviews with this status." /> : <ul className="space-y-3">{r.data.map(x => <li key={x.id} className="surface p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Stars value={x.rating} /><Badge tone="info">{x.direction === 'customer_to_engineer' ? 'Customer → engineer' : 'Engineer → customer'}</Badge></div><span className="text-xs text-thor-text">{x.reference}</span></div><p className="mt-2 text-sm">{x.text || <i className="text-thor-text">No comment</i>}</p>
-        <div className="mt-3 flex gap-2">{x.status !== 'published' && <Button size="sm" onClick={() => setT({ id: x.id, d: x.status === 'removed' ? 'restore' : 'approve' })}>{x.status === 'removed' ? 'Restore' : 'Approve'}</Button>}{x.status !== 'removed' && <Button size="sm" variant="danger" onClick={() => setT({ id: x.id, d: 'remove' })}>Remove</Button>}</div></li>)}</ul>}
+      {r.loading ? <ListSkeleton /> : r.data.length === 0 ? <EmptyState icon={CheckCircle2} title="Queue clear" body="No reviews with this status." /> : <><ul className="space-y-3">{paged.items.map(x => <li key={x.id} className="surface p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><Stars value={x.rating} /><Badge tone="info">{x.direction === 'customer_to_engineer' ? 'Customer → engineer' : 'Engineer → customer'}</Badge></div><span className="text-xs text-thor-text">{x.reference}</span></div><p className="mt-2 text-sm">{x.text || <i className="text-thor-text">No comment</i>}</p>
+        <div className="mt-3 flex gap-2">{x.status !== 'published' && <Button size="sm" onClick={() => setT({ id: x.id, d: x.status === 'removed' ? 'restore' : 'approve' })}>{x.status === 'removed' ? 'Restore' : 'Approve'}</Button>}{x.status !== 'removed' && <Button size="sm" variant="danger" onClick={() => setT({ id: x.id, d: 'remove' })}>Remove</Button>}</div></li>)}</ul>{paged.pager}</>}
       {t && <NoteSheet open title={`${t.d} review`} action="Confirm" danger={t.d === 'remove'} onClose={() => setT(null)} onSubmit={async note => { try { await api.moderateReview({ reviewId: t.id, decision: t.d, note }); toast('ok', 'Your decision has been saved.') } catch (e) { toast('bad', errMsg(e)); throw e } }} />}</div></PermGate>)
 }
 

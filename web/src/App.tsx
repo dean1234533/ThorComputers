@@ -1,6 +1,6 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { AuthProvider } from '@/lib/auth'
+import { AuthProvider, useAuth } from '@/lib/auth'
 import { ToastProvider } from '@/components/ui'
 import { RedirectHome, RequireAuth, Splash } from '@/components/Guards'
 import ErrorBoundary from '@/components/ErrorBoundary'
@@ -32,9 +32,27 @@ const AdminOverview = A('AdminOverview'), Approvals = A('Approvals'), AdminCusto
 const AdminLeads = L(() => import('@/pages/admin/AdminLeads')), AdminMarketing = L(() => import('@/pages/admin/AdminMarketing')), AdminFinance = L(() => import('@/pages/admin/AdminFinance'))
 const AdminSettings = L(() => import('@/pages/admin/AdminSettings')), AdminSecurity = L(() => import('@/pages/admin/AdminSecurity'))
 
+// Once someone is signed in, fetch the code for the pages their role can open while the browser is idle, so moving between pages never waits on a download.
+const SHARED = [() => import('@/pages/shared/Messages'), () => import('@/pages/shared/Notifications'), () => import('@/pages/shared/Settings'), () => import('@/pages/shared/Profile'), () => import('@/pages/shared/EngineerProfile'), () => import('@/pages/shared/Appointments')]
+const PREFETCH: Record<string, (() => Promise<unknown>)[]> = {
+  customer: [() => import('@/pages/customer/CustomerPages'), () => import('@/pages/customer/NewRequest'), () => import('@/pages/customer/RepairDetail')],
+  engineer: [() => import('@/pages/engineer/EngineerExtras'), () => import('@/pages/engineer/EngineerJobs'), () => import('@/pages/engineer/EngineerOnboarding')],
+  admin: [() => import('@/pages/admin/AdminPages'), () => import('@/pages/admin/AdminLeads'), () => import('@/pages/admin/AdminMarketing'), () => import('@/pages/admin/AdminFinance'), () => import('@/pages/admin/AdminSettings'), () => import('@/pages/admin/AdminSecurity')],
+}
+function Prefetch() {
+  const { role } = useAuth()
+  useEffect(() => {
+    if (!role) return
+    const run = () => { for (const f of [...(PREFETCH[role] ?? []), ...SHARED]) f().catch(() => { /* fetched again on navigation */ }) }
+    const idle = window.requestIdleCallback ? window.requestIdleCallback(run, { timeout: 3000 }) : window.setTimeout(run, 1500)
+    return () => { if (window.cancelIdleCallback) window.cancelIdleCallback(idle); else window.clearTimeout(idle) }
+  }, [role])
+  return null
+}
+
 export default function App() {
   return (
-    <ErrorBoundary><BrowserRouter><ToastProvider><AuthProvider><UpdatePrompt /><OfflineBanner /><PushBridge />
+    <ErrorBoundary><BrowserRouter><ToastProvider><AuthProvider><Prefetch /><UpdatePrompt /><OfflineBanner /><PushBridge />
       <Suspense fallback={<Splash />}><Routes>
         <Route path="/login" element={<Login />} /><Route path="/register" element={<Register />} /><Route path="/forgot" element={<Forgot />} />
         <Route path="/install" element={<Install />} /><Route path="/privacy" element={<Privacy />} /><Route path="/continue" element={<Continue />} />
