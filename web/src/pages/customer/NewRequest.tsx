@@ -29,6 +29,10 @@ export default function NewRequest() {
   const [errs, setErrs] = useState<Record<string, string>>({})
   const key = useRef(rid() + rid())            // idempotency key: a double-tap or retry can never create two jobs
   const enquiry = qs.get('e') && qs.get('t') ? { id: qs.get('e')!, token: qs.get('t')! } : undefined
+  useEffect(() => {
+    // Consume the continuation only after arriving here; clearing it during redirect render loses it under StrictMode.
+    try { if (sessionStorage.getItem('thor.after') === window.location.pathname + window.location.search) sessionStorage.removeItem('thor.after') } catch { /* storage may be unavailable */ }
+  }, [])
 
   useEffect(() => { try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d)) } catch { /* ignore */ } }, [d])
   useEffect(() => { if (!d.postcode && profile?.postcode) setD(s => ({ ...s, postcode: profile.postcode })) }, [profile, d.postcode])

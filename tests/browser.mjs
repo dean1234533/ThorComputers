@@ -116,6 +116,12 @@ await step('customer sees the seeded repair and its quote on the repair detail p
   ok(/THR-DEMO01|XPS 13/.test(t), 'seeded repair not shown'); ok(/115\.00|£115/.test(t), 'seeded quote total (£115.00) not shown')
 })
 await step('customer is bounced away from engineer and admin areas', async () => { await visit(cust, '/admin', { expectPath: '/customer' }); await visit(cust, '/engineer/jobs', { expectPath: '/customer' }) })
+await step('saved enquiry survives the home redirect under StrictMode and is consumed only on arrival', async () => {
+  await cust.page.evaluate(() => sessionStorage.setItem('thor.after', '/customer/new-request?e=resume-qa&t=resume-qa'))
+  await cust.page.goto(WEB + '/')
+  await cust.page.waitForFunction(() => location.pathname === '/customer/new-request', { timeout: 15000 })
+  ok(await cust.page.evaluate(() => sessionStorage.getItem('thor.after') === null), 'continuation was not consumed on arrival')
+})
 await step('customer completes the request wizard in the UI and the job appears', async () => {
   await visit(cust, '/customer/new-request')
   await clickText(cust.page, 'Laptop', '[role=radio]'); await clickText(cust.page, 'Continue')
@@ -265,10 +271,10 @@ await step('admin overview lists new repair requests live, with source and statu
   await visit(adm, '/admin', { mustContain: 'New repair requests' }); const t = await bodyText(adm.page); ok(/THR-DEMO01|XPS 13|ThinkPad/.test(t), 'no incoming jobs shown on the overview')
 })
 await step('finance page separates original engineer share, refunded amounts and remaining payable', async () => { await visit(adm, '/admin/finance', { mustContain: 'Remaining payable to engineers' }); const t = await bodyText(adm.page); ok(/Engineer share \(original\)/.test(t) && /Refunded from engineers/.test(t) && /Awaiting payout \(after refunds\)/.test(t)) })
-await step('marketing page: the connection check reports honestly (nothing connected ⇒ never "working")', async () => {
-  await visit(adm, '/admin/marketing', { mustContain: 'View incoming leads' }); await clickText(adm.page, 'Connection', 'nav[aria-label="Marketing sections"] button'); await clickText(adm.page, 'Run connection check', 'button')
-  await adm.page.waitForFunction(() => /Lead import NOT verified yet/.test(document.body.innerText), { timeout: 15000 }); const t = await bodyText(adm.page)
-  ok(/no Meta account is connected|required settings are missing/.test(t), t.slice(0, 600)); ok(!/Set up correctly/.test(t), 'claimed to be set up while nothing is connected'); await clickText(adm.page, 'View connection checks', 'summary'); ok(/What to do:/.test(await bodyText(adm.page)), 'no remedy shown')
+await step('marketing uses a website destination link and no Meta setup', async () => {
+  await visit(adm, '/admin/marketing', { mustContain: 'Copy advert link' }); const t = await bodyText(adm.page)
+  ok(t.includes('Incoming leads') && !t.includes('Run connection check') && !t.includes('System user access token'))
+  const link = await adm.page.$eval('input[readonly]', el => el.value); ok(link.includes('/repair-enquiry?utm_source=facebook'))
 })
 await step('settings: assistant FAQ/limits/metrics editor and the legal publishing form are present', async () => {
   await visit(adm, '/admin/settings', { mustContain: 'Assistant (guided answers + AI fallback)' }); const t = await bodyText(adm.page)

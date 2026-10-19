@@ -70,3 +70,15 @@ Almost every message is answered by built-in rules at no cost; the AI (Gemini, k
 
 ## What is NOT verified until you test with real accounts
 Real Stripe API behaviour (parameter names follow Stripe’s documented Connect destination-charge API but were not exercised against Stripe); real Meta Graph responses, permissions and App Review; real Gemini output quality; email delivery; push on devices; Firestore index builds; webhook delivery from Stripe/Meta to the deployed URLs. Use Stripe **test mode** and a Meta **test lead** (developers.facebook.com/tools/lead-ads-testing) first.
+
+## Website enquiry marketing (default)
+
+Use **Admin → Marketing** to build an advert destination link to **`/repair-enquiry`**. Paste that URL into the Facebook/Instagram advert’s website destination. Customers can submit without an account; the server validates consent, email, UK postcode, device and problem, checks a honeypot and enforces atomic email/IP quotas. A submission ID prevents double-saving when the browser retries. This public endpoint needs no Meta app secret, token, webhook or account connection.
+
+The enquiry appears in Incoming Leads immediately. The customer receives a continuation button and must register/sign in with the matching email, verify it and review the normal request form before publishing to engineers. The existing private-data protections and lead/job/payment lifecycle apply. Admins can also issue a confirmation link from Incoming Leads. No email is promised or required for the initial submission.
+
+`utm_source`, `utm_medium`, `utm_campaign`, `utm_content` and `utm_term` are captured on submission and carried into the confirmed job. These are user-supplied labels, not Meta-verified attribution. Website reporting counts up to 2,000 website enquiries and linked job outcomes; it does not claim ad impressions, clicks or spend. Budgets and advertising reports remain in Meta Ads Manager.
+
+Existing imported leads and admin follow-up endpoints remain compatible. Legacy Meta polling/synchronisation now runs only when `ENABLE_LEGACY_META=true`; retention maintenance continues regardless. Existing Meta webhooks are retained for compatibility, but are not needed by the website flow. No Meta settings, tokens or historical leads are deleted.
+
+Rate-limit counters expire after two hours and are cleaned during maintenance. New form collection uses the existing protected lead/enquiry collections; public clients cannot read or write them directly.

@@ -516,5 +516,52 @@ await step('only aggregate counters are stored: no message text, no user ids, in
   for (const d of (await A.db.collection('chatCache').get()).docs) ok(!JSON.stringify(d.data()).match(/@|E15|07700/), 'personal data in the cache')
 })
 
+section('Website enquiry flow: no Meta connection required')
+const webCustomer = await person('websitecustomer', 'customer')
+const anonApp = initializeApp({ apiKey: 'demo-key', projectId: PROJECT, appId: 'demo' }, `anonymous-web-${stamp}`)
+const anonFunctions = getFunctions(anonApp, 'europe-west2'); connectFunctionsEmulator(anonFunctions, '127.0.0.1', 5001)
+const publicSubmit = d => httpsCallable(anonFunctions, 'submitWebsiteEnquiry')(d).then(r => r.data)
+const webInput = { submissionId: crypto.randomUUID(), consent: true, website: '', name: 'Website Customer', email: webCustomer.addr, phone: '07700900123', postcode: 'e151aa', device: 'laptop', problem: 'Laptop will not turn on. Contact me at E15 1AA', tracking: { source: 'instagram', medium: 'paid_social', campaign: 'Website campaign', content: 'Video A', term: '' } }
+let websiteLead, websiteLink, websiteJob
+await step('anonymous website form validates postcode, consent and honeypot before saving', async () => {
+  for (const patch of [{ consent: false }, { postcode: 'invalid' }, { website: 'spam.example' }, { problem: 'short' }]) await denied(publicSubmit({ ...webInput, ...patch }), 'invalid-argument')
+})
+await step('anonymous submission saves a private lead without a Meta connection or public repair job', async () => {
+  const assets = A.db.doc('metaAssets/main'), keep = (await assets.get()).data()
+  try {
+    await assets.set({ status: 'disconnected' }, { merge: true })
+    const r = await publicSubmit(webInput); ok(r.ok); websiteLink = new URL(r.url)
+    websiteLead = (await A.db.collection('metaLeads').where('source', '==', 'website').get()).docs.find(d => d.data().mapped.email === webCustomer.addr)
+    ok(websiteLead); eq(websiteLead.data().mapped.postcode, 'E15 1AA'); eq(websiteLead.data().platform, 'instagram'); eq(websiteLead.data().status, 'awaiting_confirmation'); ok(!websiteLead.data().jobId)
+    eq((await A.db.doc(`enquiries/${websiteLink.searchParams.get('e')}`).get()).data().source, 'website')
+    await denied(getDoc(doc(webCustomer.db, `metaLeads/${websiteLead.id}`)), 'permission-denied')
+  } finally { await assets.set(keep) }
+})
+await step('a retry creates no second lead; the same submission cannot be reused with different details', async () => {
+  const r = await publicSubmit(webInput); eq(r.duplicate, true); websiteLink = new URL(r.url)
+  eq((await A.db.collection('metaLeads').where('source', '==', 'website').get()).size, 1)
+  await denied(publicSubmit({ ...webInput, email: 'other@demo.test' }), 'already-exists')
+})
+await step('confirmation requires the matching customer and publishes once with campaign attribution', async () => {
+  const enquiry = { id: websiteLink.searchParams.get('e'), token: websiteLink.searchParams.get('t') }
+  await denied(cust.call('getEnquiry', enquiry), 'permission-denied')
+  const r = await webCustomer.call('getEnquiry', enquiry); eq(r.source, 'website'); eq(r.fields.device, 'laptop')
+  websiteJob = (await webCustomer.call('createRepairRequest', reqIn('website-job-key', { enquiry, description: webInput.problem }))).jobId
+  const j = (await A.db.doc(`repairRequests/${websiteJob}`).get()).data(); eq(j.source, 'website'); eq(j.attribution.utm_content, 'Video A'); eq(j.attribution.campaignName, 'Website campaign'); ok(!j.description.includes('E15'))
+  eq((await websiteLead.ref.get()).data().status, 'converted_to_job')
+  await denied(webCustomer.call('createRepairRequest', reqIn('website-job-replay', { enquiry })), 'failed-precondition')
+})
+await step('website reporting counts real enquiries and jobs, excludes Meta spend and respects admin permissions', async () => {
+  await denied(sup.call('websiteMarketingStats'), 'permission-denied')
+  await denied(webCustomer.call('websiteMarketingStats'), 'permission-denied')
+  const r = await adm.call('websiteMarketingStats'); eq([r.leads, r.jobs, r.paid], [1, 1, 0]); ok(!('spendPence' in r)); eq(r.campaigns[0].name, 'Website campaign')
+  await A.db.doc(`repairRequests/${websiteJob}`).update({ paymentStatus: 'paid', status: 'completed' })
+  const after = await adm.call('websiteMarketingStats'); eq([after.paid, after.completed], [1, 1])
+})
+await step('website intake enforces the email quota and keeps retries idempotent', async () => {
+  for (let i = 0; i < 4; i++) await publicSubmit({ ...webInput, submissionId: crypto.randomUUID() })
+  await denied(publicSubmit({ ...webInput, submissionId: crypto.randomUUID() }), 'resource-exhausted')
+})
+
 console.log(`\n${pass}/${pass + fail} integration checks passed`)
 process.exit(fail ? 1 : 0)

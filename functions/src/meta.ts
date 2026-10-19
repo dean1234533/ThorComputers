@@ -202,7 +202,7 @@ export async function createLeadEnquiry(leadId: string, sendMail: boolean): Prom
     device: v.device ?? '', method: v.method ?? '', urgency: v.urgency ?? '', preferred_date: v.date ?? '' }
   const cur = (await eRef.get()).data()
   if (cur && cur.status !== 'awaiting_customer') throw new HttpsError('failed-precondition', 'This lead has already been confirmed by the customer.')
-  await eRef.set({ source: 'meta', submissionId: `meta:${leadId}`, metaLeadId: leadId, status: 'awaiting_customer', fields, email: v.email, emailHash: sha(v.email), tokenHash: sha(token),
+  await eRef.set({ source: lead.source === 'website' ? 'website' : 'meta', submissionId: `meta:${leadId}`, metaLeadId: leadId, status: 'awaiting_customer', fields, email: v.email, emailHash: sha(v.email), tokenHash: sha(token),
     attribution: lead.attribution, consent: lead.consent, createdAt: cur?.createdAt ?? FieldValue.serverTimestamp(), expiresAt: Timestamp.fromMillis(Date.now() + 14 * 86400_000) }, { merge: true })
   await db.doc(`metaLeads/${leadId}`).update({ enquiryId: enqId, updatedAt: FieldValue.serverTimestamp() })
   const url = LINKS.continueLink(enqId, token)
@@ -264,7 +264,7 @@ export async function reconcileLeads(): Promise<{ checked: number; imported: num
   return { checked, imported }
 }
 export const reconcileMetaLeads = callable(z.object({}), async (req) => { requirePerm(req, 'marketing.manage'); return reconcileLeads() }, { secrets: META_SECRETS })
-export const reconcileMetaLeadsScheduled = onSchedule({ region: REGION, schedule: 'every 60 minutes', secrets: META_SECRETS }, async () => { await reconcileLeads() })
+export const reconcileMetaLeadsScheduled = onSchedule({ region: REGION, schedule: 'every 60 minutes', secrets: META_SECRETS }, async () => { if (process.env.ENABLE_LEGACY_META === 'true') await reconcileLeads() })
 
 // ---------- campaigns ----------
 const toPence = (v: unknown) => Math.round(parseFloat(String(v ?? '0')) * 100) || 0
@@ -295,7 +295,7 @@ export async function syncCampaigns(): Promise<{ campaigns: number }> {
   return { campaigns: n }
 }
 export const syncMetaCampaigns = callable(z.object({}), async (req) => { requirePerm(req, 'marketing.manage'); return syncCampaigns() }, { secrets: META_SECRETS })
-export const syncMetaCampaignsScheduled = onSchedule({ region: REGION, schedule: 'every 6 hours', secrets: META_SECRETS }, async () => { await syncCampaigns().catch(e => console.error('campaign sync', e.message)); await purgeStaleLeads() })
+export const syncMetaCampaignsScheduled = onSchedule({ region: REGION, schedule: 'every 6 hours', secrets: META_SECRETS }, async () => { if (process.env.ENABLE_LEGACY_META === 'true') await syncCampaigns().catch(e => console.error('campaign sync', e.message)); await purgeStaleLeads(); const stale = await db.collection('websiteIntakeLimits').where('expiresAt', '<', Timestamp.now()).limit(500).get(); if (!stale.empty) { const b = db.batch(); stale.docs.forEach(d => b.delete(d.ref)); await b.commit() } })
 
 /** Retention: unconverted leads lose their personal data after 90 days (the anonymous counts stay for reporting). */
 export async function purgeStaleLeads(days = 90) {

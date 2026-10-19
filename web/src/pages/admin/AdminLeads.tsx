@@ -9,7 +9,7 @@ import { Badge, Button, EmptyState, Input, ListSkeleton, PageHeader, Select, She
 import { DateFilter, ALL_TIME, dateConstraints, rangeKey, type DateRange } from '@/components/DateFilter'
 
 interface Lead {
-  status: string; statusNote?: string; platform?: 'facebook' | 'instagram'; campaignId?: string | null; campaignName?: string | null; adName?: string | null; formId?: string | null
+  status: string; statusNote?: string; platform?: 'facebook' | 'instagram' | 'website'; campaignId?: string | null; campaignName?: string | null; adName?: string | null; formId?: string | null
   mapped?: Record<string, string>; missing?: string[]; invalid?: string[]; raw?: { name: string; values?: string[] }[]; jobId?: string; createdAt?: { toDate(): Date }; consent?: { given: boolean; via: string }; routingExcluded?: boolean; purged?: boolean
 }
 export const LEAD_STATUS: Record<string, { label: string; tone: 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'brand' }> = {
@@ -30,15 +30,15 @@ export default function AdminLeads() {
   if (!can('marketing.manage')) return <EmptyState icon={ShieldCheck} title="No access" body="Incoming leads need the marketing permission." />
   const lead = data.find(l => l.id === open)
   return (
-    <div><PageHeader title="Incoming Leads" sub="Facebook and Instagram enquiries, from advert to repair job." />
+    <div><PageHeader title="Incoming Leads" sub="Website and advertising enquiries, from first contact to repair job." />
       <DateFilter value={range} onChange={setRange} />
       <div className="mb-4 grid gap-3 sm:grid-cols-4">
         <Input label="Search" placeholder="Name, email, campaign…" value={q} onChange={e => setQ(e.target.value)} />
         <Select label="Status" value={status} onChange={e => setStatus(e.target.value)}><option value="">All</option>{Object.entries(LEAD_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</Select>
-        <Select label="Source" value={platform} onChange={e => setPlatform(e.target.value)}><option value="">Facebook + Instagram</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></Select>
+        <Select label="Source" value={platform} onChange={e => setPlatform(e.target.value)}><option value="">All sources</option><option value="website">Website / other</option><option value="facebook">Facebook</option><option value="instagram">Instagram</option></Select>
         <div className="flex items-end"><p className="text-sm text-thor-text" role="status">{rows.length} of {data.length} leads</p></div>
       </div>
-      {loading ? <ListSkeleton rows={4} /> : error ? <EmptyState icon={Inbox} title="Can’t load leads" body={errMsg(error)} /> : rows.length === 0 ? <EmptyState icon={Inbox} title="No leads yet" body="Leads appear here the moment someone submits your Facebook or Instagram lead form. Connect Meta under Marketing." /> :
+      {loading ? <ListSkeleton rows={4} /> : error ? <EmptyState icon={Inbox} title="Can’t load leads" body={errMsg(error)} /> : rows.length === 0 ? <EmptyState icon={Inbox} title="No leads yet" body="Enquiries appear here when a customer submits your repair enquiry page. Get your advert link under Marketing." /> :
         <div className="overflow-x-auto rounded-3xl bg-white shadow-sm ring-1 ring-ink/5"><table className="w-full min-w-[820px] text-left text-sm"><thead className="text-xs uppercase text-thor-text"><tr>{['Customer', 'Source', 'Campaign', 'Received', 'Device / issue', 'Area', 'Status', 'Job'].map(h => <th key={h} className="px-4 py-3 font-medium">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-ink/8">{paged.items.map(l => <tr key={l.id} className="cursor-pointer hover:bg-paper" onClick={() => setOpen(l.id)}>
             <td className="px-4 py-3"><button className="text-left font-medium text-thor-blue hover:underline" onClick={() => setOpen(l.id)}>{l.mapped?.name || (l.purged ? 'Removed (retention)' : 'Unknown')}</button><p className="text-xs text-thor-text">{l.mapped?.email}</p></td>
@@ -62,9 +62,9 @@ function LeadSheet({ lead, onClose }: { lead: (Lead & { id: string }) | null; on
     <Sheet open onClose={() => { setLink(''); setEdit({}); setReason(''); onClose() }} title={`Lead ${lead.mapped?.name ?? ''}`}>
       <div className="space-y-4 text-sm">
         <div className="flex flex-wrap items-center gap-2"><Badge tone={LEAD_STATUS[lead.status]?.tone ?? 'neutral'}>{LEAD_STATUS[lead.status]?.label ?? lead.status}</Badge>
-          <Badge tone="brand">{lead.platform ?? 'meta'}</Badge>{lead.consent && <Badge tone={lead.consent.given ? 'ok' : 'bad'}>{lead.consent.given ? 'Consent: ' + lead.consent.via.replace('_', ' ') : 'Consent declined'}</Badge>}{lead.routingExcluded && <Badge tone="warn">Campaign not routed</Badge>}</div>
+          <Badge tone="brand">{lead.platform ?? 'website'}</Badge>{lead.consent && <Badge tone={lead.consent.given ? 'ok' : 'bad'}>{lead.consent.given ? 'Consent: ' + lead.consent.via.replace('_', ' ') : 'Consent declined'}</Badge>}{lead.routingExcluded && <Badge tone="warn">Campaign not routed</Badge>}</div>
         {lead.statusNote && <p className="rounded-xl bg-thor-sky/20 p-3">{lead.statusNote}</p>}
-        <dl className="grid gap-3 sm:grid-cols-2"><div><dt className="text-thor-text">Campaign</dt><dd>{lead.campaignName ?? lead.campaignId ?? '—'}</dd></div><div><dt className="text-thor-text">Lead form</dt><dd>{lead.formId ?? '—'}</dd></div></dl>
+        <dl className="grid gap-3 sm:grid-cols-2"><div><dt className="text-thor-text">Campaign</dt><dd>{lead.campaignName ?? lead.campaignId ?? '—'}</dd></div><div><dt className="text-thor-text">Form / page</dt><dd>{lead.formId ?? 'Repair enquiry page'}</dd></div></dl>
         {(lead.missing?.length || lead.invalid?.length) ? <p className="rounded-xl bg-warn/10 p-3">Needs attention: {[...(lead.missing ?? []), ...(lead.invalid ?? [])].join(', ')}</p> : null}
         <div className="grid gap-3 sm:grid-cols-2">{FIELDS.map(([k, label]) => <Input key={k} label={label} disabled={!editable} value={edit[k] ?? lead.mapped?.[k] ?? ''} onChange={e => setEdit(s => ({ ...s, [k]: e.target.value }))} />)}</div>
         {editable && <Button variant="soft" loading={busy === 'save'} disabled={!Object.keys(edit).length} onClick={() => run('save', async () => { await api.updateMetaLead({ leadId: lead.id, fields: edit }); setEdit({}) }, 'Lead updated.')}>Save corrections</Button>}

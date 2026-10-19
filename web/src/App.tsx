@@ -16,6 +16,7 @@ const named = (f: () => Promise<any>, k: string) => lazy(async () => ({ default:
 
 const Login = L(() => import('@/pages/auth/Login')), Forgot = L(() => import('@/pages/auth/Forgot')), Verify = L(() => import('@/pages/auth/Verify'))
 const Register = L(() => import('@/pages/auth/Register')), Setup = lazy(async () => { const m = await import('@/pages/auth/Register'); return { default: () => <m.default setup /> } })
+const RepairEnquiry = L(() => import('@/pages/shared/RepairEnquiry'))
 const Install = named(() => import('@/pages/shared/Public'), 'InstallPage'), Continue = named(() => import('@/pages/shared/Public'), 'Continue'), Privacy = named(() => import('@/pages/shared/Public'), 'Privacy')
 
 const CustomerHome = named(() => import('@/pages/customer/CustomerPages'), 'CustomerHome'), MyRepairs = named(() => import('@/pages/customer/CustomerPages'), 'MyRepairs'), CustomerQuotations = named(() => import('@/pages/customer/CustomerPages'), 'CustomerQuotations')
@@ -55,7 +56,7 @@ export default function App() {
     <ErrorBoundary><BrowserRouter><ToastProvider><AuthProvider><Prefetch /><UpdatePrompt /><OfflineBanner /><PushBridge />
       <Suspense fallback={<Splash />}><Routes>
         <Route path="/login" element={<Login />} /><Route path="/register" element={<Register />} /><Route path="/forgot" element={<Forgot />} />
-        <Route path="/install" element={<Install />} /><Route path="/privacy" element={<Privacy />} /><Route path="/continue" element={<Continue />} />
+        <Route path="/repair-enquiry" element={<RepairEnquiry />} /><Route path="/install" element={<Install />} /><Route path="/privacy" element={<Privacy />} /><Route path="/continue" element={<Continue />} />
         <Route path="/setup" element={<Setup />} /><Route path="/verify" element={<Verify />} />
         <Route path="/" element={<RedirectHome />} />
 

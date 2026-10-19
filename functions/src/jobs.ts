@@ -23,7 +23,7 @@ export const RequestInput = z.object({
   accessNotes: z.string().trim().max(300).optional().default(''),
   preferredDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(5).default([]),
   photoPaths: z.array(z.string()).max(6).default([]),
-  source: z.enum(['app', 'wordpress', 'meta']).default('app'),
+  source: z.enum(['app', 'wordpress', 'meta', 'website']).default('app'),
   enquiry: z.object({ id: z.string().max(80), token: z.string().max(80) }).optional(),   // set when continuing a WordPress enquiry
 })
 
@@ -86,8 +86,8 @@ export const createRepairRequest = callable(RequestInput, async (req, d) => {
   if (!d.enquiry) return createRequestFor(c.uid, d)
   const enq = await verifyEnquiry(d.enquiry.id, d.enquiry.token, String(c.token.email).toLowerCase())
   // Deterministic key => the same WordPress enquiry can only ever produce one repair request.
-  const fromMeta = enq.data.source === 'meta'
-  const res = await createRequestFor(c.uid, { ...d, requestKey: `${fromMeta ? 'meta' : 'wp'}_${d.enquiry.id}`.slice(0, 64), source: fromMeta ? 'meta' : 'wordpress' }, fromMeta ? (enq.data.attribution ?? null) : null)
+  const fromMeta = ['meta', 'website'].includes(enq.data.source)
+  const res = await createRequestFor(c.uid, { ...d, requestKey: `${fromMeta ? 'meta' : 'wp'}_${d.enquiry.id}`.slice(0, 64), source: fromMeta ? enq.data.source : 'wordpress' }, fromMeta ? (enq.data.attribution ?? null) : null)
   await enq.ref.update({ status: 'claimed', claimedBy: c.uid, jobId: res.jobId, claimedAt: FieldValue.serverTimestamp() })
   if (fromMeta && enq.data.metaLeadId) await advanceLeadDoc(enq.data.metaLeadId, 'converted_to_job', 'job_created', { jobId: res.jobId, customerId: c.uid })   // lead -> customer -> job link
   return res

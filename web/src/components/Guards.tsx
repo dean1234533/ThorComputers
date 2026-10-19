@@ -32,7 +32,7 @@ export function RedirectHome() {
   if (loading) return <Splash />
   if (!user) return <Navigate to="/login" replace />
   let after: string | null = null
-  try { after = sessionStorage.getItem('thor.after'); if (after && role === 'customer' && !needsSetup) sessionStorage.removeItem('thor.after') } catch { /* ignore */ }
+  try { after = sessionStorage.getItem('thor.after'); if (after && !after.startsWith('/customer/new-request?')) after = null } catch { /* ignore */ }
   if (after && role === 'customer' && !needsSetup) return <Navigate to={after} replace />   // resume a WordPress enquiry after sign-up
   return <Navigate to={needsSetup ? '/setup' : homeFor(role)} replace />
 }

@@ -58,7 +58,7 @@ export async function verifyEnquiry(id: string, token: string, email: string) {
   if (!e || e.tokenHash !== sha(token)) throw new HttpsError('permission-denied', 'This link is not valid.')
   if (e.status !== 'awaiting_customer') throw new HttpsError('failed-precondition', 'This enquiry has already been used.')
   if (e.expiresAt.toMillis() < Date.now()) throw new HttpsError('deadline-exceeded', 'This link has expired.')
-  if (e.email !== email) throw new HttpsError('permission-denied', 'Sign in with the email address you used on thorcomputer.com.')
+  if (e.email !== email) throw new HttpsError('permission-denied', 'Sign in with the email address you used for this repair enquiry.')
   return { ref, data: e }
 }
 
@@ -66,6 +66,6 @@ export async function verifyEnquiry(id: string, token: string, email: string) {
 export const getEnquiry = callable(z.object({ id: z.string().max(80), token: z.string().max(80) }), async (req, d) => {
   const c = requireRole(req, 'customer')
   const { data } = await verifyEnquiry(d.id, d.token, String(c.token.email).toLowerCase())
-  if (data.source === 'meta' && data.metaLeadId) await advanceLeadDoc(data.metaLeadId, 'verified', 'verified')   // the customer proved they own the email address
+  if (['meta', 'website'].includes(data.source) && data.metaLeadId) await advanceLeadDoc(data.metaLeadId, 'verified', 'verified')   // the customer proved they own the email address
   return { fields: data.fields, source: data.source ?? 'wordpress' }
 })

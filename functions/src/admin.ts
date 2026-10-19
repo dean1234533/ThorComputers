@@ -21,9 +21,10 @@ export const adminStats = callable(z.object({}), async (req) => {
   let marketing: Record<string, number> | null = null, finance: Record<string, number> | null = null
   if (has('marketing.manage')) {
     const [fb, ig, awaiting, adJobs, camps] = await Promise.all([c(db.collection('metaLeads').where('platform', '==', 'facebook')), c(db.collection('metaLeads').where('platform', '==', 'instagram')),
-      c(db.collection('metaLeads').where('status', 'in', ['awaiting_confirmation', 'awaiting_information'])), c(db.collection('repairRequests').where('attribution.source', '==', 'meta')), db.collection('metaCampaigns').get()])
+      c(db.collection('metaLeads').where('status', 'in', ['awaiting_confirmation', 'awaiting_information'])), c(db.collection('repairRequests').where('attribution.source', 'in', ['meta', 'website'])), db.collection('metaCampaigns').get()])
     const spend = camps.docs.reduce((a, x) => a + (x.data().nonGbp ? 0 : (x.data().insights?.spendPence ?? 0)), 0), leads = camps.docs.reduce((a, x) => a + (x.data().insights?.leads ?? 0), 0)
-    marketing = { facebookLeads: fb, instagramLeads: ig, leadsAwaitingVerification: awaiting, advertisingSpendPence: spend, costPerLeadPence: spend && leads ? Math.round(spend / leads) : 0, advertisingJobs: adJobs }
+    const websiteEnquiries = await c(db.collection('metaLeads').where('source', '==', 'website'))
+    marketing = { websiteEnquiries, facebookLeads: fb, instagramLeads: ig, leadsAwaitingVerification: awaiting, advertisingSpendPence: spend, costPerLeadPence: spend && leads ? Math.round(spend / leads) : 0, advertisingJobs: adJobs }
   }
   if (has('finance.view')) {
     const [tx, outstanding, disputed] = await Promise.all([db.collection('transactions').where('status', 'in', ['paid', 'partially_refunded', 'refunded', 'disputed']).limit(2000).get(), c(db.collection('transactions').where('status', 'in', ['checkout_created', 'payment_failed'])), c(db.collection('transactions').where('status', '==', 'disputed'))])

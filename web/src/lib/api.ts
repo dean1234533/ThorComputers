@@ -18,6 +18,7 @@ export interface ReviewInput { jobId: string; ratings: Record<string, number>; t
 export interface AdminMfaStatus { mode: 'off' | 'warn' | 'enforce'; sessionHasSecondFactor: boolean; enrolledFactors: number; admins?: { uid: string; email: string; enrolledFactors: number }[] }
 
 export interface MetaCheck { id: string; label: string; ok: boolean; detail: string; fix?: string; required?: boolean }
+export interface WebsiteMarketingStats { leads: number; jobs: number; paid: number; completed: number; limited: boolean; campaigns: { name: string; leads: number; jobs: number; paid: number; completed: number }[] }
 export interface MetaSelfTest { overall: 'not_configured' | 'not_connected' | 'needs_attention' | 'ready'; ingestionVerified: boolean; lastWebhookAt: number | null; lastLeadAt: number | null; checks: MetaCheck[]; notes: string[] }
 export interface LegalInput { businessName: string; registeredAddress: string; companyNumber?: string; contactEmail: string; icoNumber?: string; icoExempt?: boolean; privacyText: string; approved: boolean }
 export interface QuickReply { label: string; value: string }
@@ -68,7 +69,9 @@ export const api = {
   resolvePaymentDispute: fn<{ disputeId: string; resolution: 'won' | 'lost' | 'refunded' | 'withdrawn'; note: string; customerComplaint?: string; engineerResponse?: string }>('resolvePaymentDispute'),
   saveFinanceSettings: fn<{ commissionBps: number; requirePaymentBeforeBooking: boolean; refundPolicy?: string; cancellationPolicy?: string }>('saveFinanceSettings'),
   adminFinanceStats: fn<{ from?: string; to?: string }, any>('adminFinanceStats'),
-  // marketing & lead generation (Meta)
+  submitWebsiteEnquiry: fn<{ submissionId: string; consent: true; name: string; email: string; phone: string; postcode: string; device: string; problem: string; website: string; tracking: Record<string, string> }, { ok: boolean; duplicate: boolean; url: string }>('submitWebsiteEnquiry'),
+  websiteMarketingStats: fn<object, WebsiteMarketingStats>('websiteMarketingStats'),
+  // Legacy Meta leads remain available for existing records.
   metaConnectUrl: fn<object, { url: string }>('metaConnectUrl'),
   metaConnectWithToken: fn<{ token: string }, { pages: number; adAccounts: number; subscribedPages: number }>('metaConnectWithToken'),
   metaDisconnect: fn<object>('metaDisconnect'),
