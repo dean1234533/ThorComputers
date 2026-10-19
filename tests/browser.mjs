@@ -266,9 +266,9 @@ await step('admin overview lists new repair requests live, with source and statu
 })
 await step('finance page separates original engineer share, refunded amounts and remaining payable', async () => { await visit(adm, '/admin/finance', { mustContain: 'Remaining payable to engineers' }); const t = await bodyText(adm.page); ok(/Engineer share \(original\)/.test(t) && /Refunded from engineers/.test(t) && /Awaiting payout \(after refunds\)/.test(t)) })
 await step('marketing page: the connection check reports honestly (nothing connected ⇒ never "working")', async () => {
-  await visit(adm, '/admin/marketing', { mustContain: 'Run connection check' }); await clickText(adm.page, 'Run connection check', 'button')
+  await visit(adm, '/admin/marketing', { mustContain: 'View incoming leads' }); await clickText(adm.page, 'Connection', 'nav[aria-label="Marketing sections"] button'); await clickText(adm.page, 'Run connection check', 'button')
   await adm.page.waitForFunction(() => /Lead import NOT verified yet/.test(document.body.innerText), { timeout: 15000 }); const t = await bodyText(adm.page)
-  ok(/no Meta account is connected|required settings are missing/.test(t), t.slice(0, 600)); ok(!/Set up correctly/.test(t), 'claimed to be set up while nothing is connected'); ok(/What to do:/.test(t), 'no remedy shown')
+  ok(/no Meta account is connected|required settings are missing/.test(t), t.slice(0, 600)); ok(!/Set up correctly/.test(t), 'claimed to be set up while nothing is connected'); await clickText(adm.page, 'View connection checks', 'summary'); ok(/What to do:/.test(await bodyText(adm.page)), 'no remedy shown')
 })
 await step('settings: assistant FAQ/limits/metrics editor and the legal publishing form are present', async () => {
   await visit(adm, '/admin/settings', { mustContain: 'Assistant (guided answers + AI fallback)' }); const t = await bodyText(adm.page)

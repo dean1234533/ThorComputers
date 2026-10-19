@@ -452,6 +452,8 @@ export const metaSelfTest = callable(z.object({}), async (req) => {
       missing = must.filter(x => !granted.has(x)); permsOk = !missing.length
       add({ id: 'permissions', label: 'Required permissions granted', ok: permsOk, detail: permsOk ? 'All required permissions are granted' : `Missing: ${missing.join(', ')}`, fix: 'Reconnect and approve every permission. For people outside your own app team these need Meta App Review.' })
       const optional = want.filter(x => !granted.has(x)); if (optional.length) add({ id: 'permissions_optional', label: 'Optional permissions (campaign controls)', ok: false, required: false, detail: `Not granted: ${optional.join(', ')}. Campaign pause/budget controls may be refused by Meta.`, fix: 'Reconnect and approve them if you want campaign controls.' })
+      add({ id: 'pages', label: 'Facebook Page available', ok: !!assets?.pages?.length, detail: assets?.pages?.length ? `${assets.pages.length} Page(s) connected` : 'No Facebook Page is available to this connection', fix: 'Grant this connection access to your Facebook Page, then reconnect Meta.' })
+      add({ id: 'ad_accounts', label: 'Active ad account available', ok: !!assets?.adAccounts?.some((a: { active: boolean }) => a.active), detail: assets?.adAccounts?.some((a: { active: boolean }) => a.active) ? 'An active ad account is connected' : 'No active ad account is available', fix: 'Grant access to an active ad account, then reconnect Meta.' })
       for (const pg of (assets?.pages ?? []) as { id: string; name: string }[]) {
         const subs = await graph(`/${pg.id}/subscribed_apps`, { token: MOCK() ? 'mock' : await pageToken(pg.id) }).catch((e: Error) => ({ error: e.message }))
         const fields = ((subs as any).data ?? []).flatMap((a: any) => a.subscribed_fields ?? [])
@@ -476,4 +478,4 @@ export const metaSelfTest = callable(z.object({}), async (req) => {
   return { overall, ingestionVerified, lastWebhookAt: ms(lastEvent.docs[0]), lastLeadAt: ms(lastLead.docs[0], 'createdAt'), checks,
     notes: ['While your Meta app is in Development mode, Meta only delivers test webhooks sent from its dashboard; real lead webhooks start after the app is published. Until then use Meta’s Lead Ads Testing Tool, then press “Check for missed leads”.',
       ingestionVerified ? 'At least one lead has been imported, so the import path has worked end to end.' : 'No lead has been imported yet, so lead import is NOT verified, even if every check above passes.'] }
-})
+}, { secrets: META_SECRETS })

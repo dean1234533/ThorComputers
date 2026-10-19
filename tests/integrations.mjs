@@ -363,6 +363,16 @@ await step('a disconnected account is reported as "not connected", never as read
   await A.db.doc('metaAssets/main').set(keep)
 })
 
+await step('a token with no Page or active ad account cannot be reported ready', async () => {
+  const ref = A.db.doc('metaAssets/main'), keep = (await ref.get()).data()
+  try {
+    await ref.set({ status: 'connected', pages: [], adAccounts: [] }, { merge: true })
+    const r = await adm.call('metaSelfTest'); eq(r.overall, 'needs_attention')
+    eq(r.checks.find(c => c.id === 'pages').ok, false)
+    eq(r.checks.find(c => c.id === 'ad_accounts').ok, false)
+  } finally { await ref.set(keep) }
+})
+
 section('Legal: the draft notice is only removed by the owner’s approved policy')
 await step('nothing is invented: publishing needs the owner’s business details, ICO status and full policy text; only a Super Administrator can do it', async () => {
   const base = { businessName: 'Test Co Ltd', registeredAddress: '1 Test Street', companyNumber: '', contactEmail: 'privacy@test.example', icoNumber: '', icoExempt: false, privacyText: 'short', approved: true }
